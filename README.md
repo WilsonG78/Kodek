@@ -2,6 +2,10 @@
 
 **Kodek** is a modern programming language designed specifically for Polish children to learn fundamental computer science concepts through an intuitive, Polish syntax that compiles to C. This combines readability with the performance of native code.
 
+## 📌 Authors
+- Filip Latawiec
+- Bartosz Lech
+
 ## 🎯 Project Goals
 
 Kodek aims to:
