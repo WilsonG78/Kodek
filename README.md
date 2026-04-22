@@ -24,6 +24,8 @@ Kodek aims to:
 - **Compilation to C** - Fast and efficient program execution
 - **Core Algorithms** - Loops, conditionals, functions, recursion
 - **Child-Friendly Grammar** - Minimal punctuation, indent-based blocks
+- **ANTLR** - parser generator
+- **C++** - implementation language
 
 ---
 
