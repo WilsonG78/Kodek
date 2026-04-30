@@ -1,0 +1,25 @@
+# ANTLR4 - wygenerowane pliki parsera
+parser/gen/
+parser/*.jar
+
+# Java - skompilowane klasy
+*.class
+
+# Kompilator C++ i pliki wykonywalne
+*.o
+*.out
+*.exe
+a.out
+
+# Pliki debugowania
+*.dSYM/
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# System
+.DS_Store
+Thumbs.db
