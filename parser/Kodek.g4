@@ -2,7 +2,6 @@ grammar Kodek;
 
 tokens { INDENT, DEDENT }
 
-// Obsługa wcięć Python-style (INDENT/DEDENT wstrzykiwane przez nextToken)
 @lexer::header {
 import java.util.*;
 }
@@ -62,14 +61,11 @@ private Token mk(int type, String text) {
 
 }
 
-// ── Reguły parsera ────────────────────────────────────────────
 
-// NEWLINE na poziomie programu i bloku pozwala na puste linie / linie z komentarzem
 program
     : (NEWLINE | statement)* EOF
     ;
 
-// Instrukcje proste kończą się NEWLINE; blokowe nie (block już zawiera DEDENT)
 statement
     : simpleStmt NEWLINE
     | blockStmt
@@ -94,7 +90,7 @@ blockStmt
     | functionDef
     ;
 
-// Typy
+
 typeName
     : 'liczba'
     | 'ułamek'
@@ -103,7 +99,6 @@ typeName
     | 'lista'
     ;
 
-// Deklaracja i przypisanie
 varDecl
     : 'zmienna' typeName ID ('=' expression)?
     ;
@@ -113,7 +108,6 @@ assignment
     | ID '[' expression ']' '=' expression
     ;
 
-// Wyrażenia (kolejność = priorytet operatorów)
 expression : logicalOr ;
 
 logicalOr  : logicalAnd ('lub'  logicalAnd)* ;
@@ -150,7 +144,7 @@ atom
 listLiteral : '[' (expression (',' expression)*)? ']' ;
 listAccess  : ID '[' expression ']'                   ;
 
-// Sterowanie
+
 ifStmt
     : 'jeśli' '(' expression ')' ':' block
       ('inaczej' 'jeśli' '(' expression ')' ':' block)*
@@ -169,7 +163,7 @@ block : NEWLINE INDENT (NEWLINE | statement)+ DEDENT ;
 breakStmt    : 'przerwij'  ;
 continueStmt : 'kontynuuj' ;
 
-// Funkcje
+
 functionDef
     : 'funkcja' ID '(' paramList? ')' ('zwraca' typeName)? ':' block
     ;
@@ -183,17 +177,16 @@ argumentList : expression (',' expression)* ;
 
 returnStmt : 'zwróć' expression ;
 
-// Wejście / wyjście
+
 readStmt  : 'czytaj' '(' ID ')' ;
 writeStmt : ('pisz' | 'piszln') '(' expression ')' ;
 
-// Pliki
+
 fileStmt
     : 'otwórz'  '(' expression ',' ID ')'
     | 'zamknij' '(' ID ')'
     ;
 
-// ── Reguły leksera ────────────────────────────────────────────
 
 BOOLEAN : 'prawda' | 'fałsz' ;
 

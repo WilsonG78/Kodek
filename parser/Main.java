@@ -7,7 +7,6 @@ public class Main {
     public static void main(String[] args) throws Exception {
         String file = args.length > 0 ? args[0] : "test.kodek";
 
-        // ── Leksowanie ─────────────────────────────────────────
         CharStream input = CharStreams.fromFileName(file, StandardCharsets.UTF_8);
         KodekLexer lexer = new KodekLexer(input);
         lexer.removeErrorListeners();
@@ -36,7 +35,6 @@ public class Main {
             System.out.printf("  %-20s '%s'  (linia %d)%n", name, text, t.getLine());
         }
 
-        // ── Parsowanie ─────────────────────────────────────────
         System.out.println();
         System.out.println("╔══════════════════════════════════════╗");
         System.out.println("║         Drzewo parsowania            ║");
@@ -60,13 +58,12 @@ public class Main {
 
         System.out.println();
         if (errors[0] == 0) {
-            System.out.println("✓ Parsowanie zakończone pomyślnie.");
+            System.out.println("Parsowanie zakończone pomyślnie.");
         } else {
-            System.out.printf("✗ Znaleziono %d błąd(ów) składniowych.%n", errors[0]);
+            System.out.printf("Znaleziono %d błąd(ów) składniowych.%n", errors[0]);
         }
     }
 
-    // Czytelny widok drzewa z wcięciami
     private static String prettyTree(ParseTree node, KodekParser parser, int depth) {
         StringBuilder sb = new StringBuilder();
         String indent = "  ".repeat(depth);
