@@ -25,7 +25,7 @@ Kodek aims to:
 - **Core Algorithms** - Loops, conditionals, functions, recursion
 - **Child-Friendly Grammar** - Minimal punctuation, indent-based blocks
 - **ANTLR** - parser generator
-- **C++** - implementation language
+- **Java** - implementation language
 
 ---
 
