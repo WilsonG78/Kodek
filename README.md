@@ -23,7 +23,7 @@ Kodek aims to:
 - **File Operations** - Writing to and reading from files
 - **Compilation to C** - Fast and efficient program execution
 - **Core Algorithms** - Loops, conditionals, functions, recursion
-- **Child-Friendly Grammar** - Minimal punctuation, indent-based blocks
+- **Child-Friendly Grammar** - Minimal punctuation, logical block scoping using curly braces 
 - **ANTLR** - parser generator
 - **Java** - implementation language
 
@@ -105,13 +105,11 @@ Kodek aims to:
 
 | Symbol | Name | Purpose |
 |--------|------|---------|
-| `:` | Colon | Marks beginning of indented block |
 | `(` `)` | Parentheses | Group expressions, function parameters |
 | `[` `]` | Brackets | List literals and indexing |
 | `,` | Comma | Separate arguments/list elements |
 | `#` | Hash | Start of comment (extends to end of line) |
-| Whitespace (indent) | Indentation | Define block scope (like Python) |
-| Newline | Line break | Separate statements |
+| `{` `}` | Curly Braces | Define block scope (functions, loops, conditionals) |
 
 ### 6. Built-in Functions
 
@@ -149,6 +147,17 @@ VarDecl          = "zmienna" Type Identifier [ "=" Expression ]
 Assignment       = Identifier "=" Expression
                  | ListAccess "=" Expression
 
+(* Conditions (Logic for If/While) *)
+Condition        = CondAnd { "lub" CondAnd }
+CondAnd          = CondNeg { "oraz" CondNeg }
+CondNeg          = "nie" CondNeg 
+                 | Boolean 
+                 | Identifier 
+                 | "(" Condition ")" 
+                 | StrictComparison
+
+StrictComparison = Arithmetic CompOp Arithmetic
+
 (* Expressions *)
 Expression       = LogicalOr
 LogicalOr        = LogicalAnd { "lub" LogicalAnd }
@@ -173,23 +182,23 @@ Digit            = "0" | "1" | ... | "9"
 Letter           = "a".."z" | "A".."Z" | "ą".."ż"
 
 (* Control Flow *)
-IfStmt           = "jeśli" "(" Expression ")" ":" Block
-                   { "inaczej" "jeśli" "(" Expression ")" ":" Block }
-                   [ "inaczej" ":" Block ]
+IfStmt           = "jeśli" "(" Condition ")" Block
+                   { "inaczej" "jeśli" "(" Condition ")" Block }
+                   [ "inaczej" Block ]
 
-ForLoop          = "dla" Identifier "od" Expression "do" Expression ":" Block
-                 | "dla" Identifier "w" Expression ":" Block
+ForLoop          = "dla" Identifier "od" Expression "do" Expression Block
+                 | "dla" Identifier "w" Expression Block
 
-WhileLoop        = "dopóki" "(" Expression ")" ":" Block
+WhileLoop        = "dopóki" "(" Condition ")" Block
 
-Block            = NewLine Indent { Statement } Dedent
+Block            = "{" { Statement } "}"
 
 (* Loop Control *)
 BreakStmt        = "przerwij"
 ContinueStmt     = "kontynuuj"
 
 (* Functions *)
-FunctionDef      = "funkcja" Identifier "(" [ ParamList ] ")" [ "zwraca" Type ] ":" Block
+FunctionDef      = "funkcja" Identifier "(" [ ParamList ] ")" [ "zwraca" Type ] Block
 ParamList        = Type Identifier { "," Type Identifier }
 
 FunctionCall     = Identifier "(" [ ArgumentList ] ")"
@@ -207,13 +216,18 @@ FileStmt         = "otwórz" "(" Expression "," Identifier ")"
 
 (* List/Array Access *)
 ListAccess       = Identifier "[" Expression "]"
-
-(* Structural *)
-NewLine          = "\n"
-Indent           = Indentation increase
-Dedent           = Indentation decrease
 ```
 
+---
+
+### Logic vs. Arithmetic Separation
+```
+In Kodek, we intentionally distinguish between Expressions (used for calculations) and Conditions 
+(used for decision making in jeśli and dopóki).
+Expressions: Focus on math (e.g., 5 + x ^ 2).
+Conditions: Focus on logic. They require Strict Comparison (e.g., x > 0) or boolean values. 
+This prevents confusing bugs and encourages clear, logical thinking.
+```
 ---
 
 ## 📖 Syntax Examples
@@ -254,12 +268,13 @@ int oceny[] = {4, 5, 3, 2, 5};
 ```
 zmienna liczba wiek = 17
 
-jeśli (wiek >= 18):
-    pisz("Dorosly")
-inaczej jeśli (wiek >= 13):
+jeśli (wiek >= 18) {
+    pisz("Dorosły")
+} inaczej jeśli (wiek >= 13) {
     pisz("Nastolatek")
-inaczej:
+} inaczej {
     pisz("Dziecko")
+}
 ```
 
 **Compiles to C:**
@@ -280,9 +295,10 @@ if (wiek >= 18) {
 ### 3. For Loop (Fixed Range)
 
 ```
-dla k od 1 do 10:
+dla k od 1 do 10{
     pisz(k)
     pisz(" ")
+}
 ```
 
 **Compiles to C:**
@@ -298,9 +314,10 @@ for (int k = 1; k <= 10; k++) {
 
 ```
 zmienna liczba x = 0
-dopóki (x < 5):
+dopóki (x < 5){
     piszln(x)
     x = x + 1
+}
 ```
 
 **Compiles to C:**
@@ -318,9 +335,10 @@ while (x < 5) {
 
 ```
 zmienna lista oceny = [5, 4, 3, 5, 2]
-dla ocena w oceny:
+dla ocena w oceny {
     piszln(ocena)
-```
+}
+``` 
 
 **Compiles to C:**
 ```c
@@ -337,12 +355,15 @@ for (int _i = 0; _i < oceny_len; _i++) {
 ### 6. Break and Continue
 
 ```
-dla k od 1 do 10:
-    jeśli (k == 5):
+dla k od 1 do 10{
+    jeśli (k == 5){
         przerwij
-    jeśli (k % 2 == 0):
+    }
+    jeśli (k % 2 == 0){
         kontynuuj
+    }
     piszln(k)
+}
 ```
 
 **Compiles to C:**
@@ -359,11 +380,13 @@ for (int k = 1; k <= 10; k++) {
 ### 7. Functions with Types
 
 ```
-funkcja dodaj(liczba a, liczba b) zwraca liczba:
+funkcja dodaj(liczba a, liczba b) zwraca liczba{
     zwróć a + b
+}
 
-funkcja przywitaj(tekst imie):
+funkcja przywitaj(tekst imie){
     piszln(imie)
+}
 
 zmienna liczba wynik = dodaj(3, 7)
 przywitaj("Ala")
