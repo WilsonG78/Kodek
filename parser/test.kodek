@@ -2,15 +2,20 @@
 zmienna liczba wynik = 0
 zmienna tekst powitanie = "Witaj"
 piszln(powitanie)
-jeśli (wynik == 0):
+jeśli (wynik == 0) {
     wynik = wynik + 10
-inaczej jeśli (wynik > 0):
+}
+inaczej jeśli (wynik > 0) {
     wynik = wynik + 1
-inaczej:
+}
+inaczej {
     piszln(wynik)
-dla k od 1 do 3:
+}
+dla k od 1 do 3 {
     wynik = wynik + k
+}
 piszln(wynik)
 zmienna lista oceny = [5, 4, 3]
-dla ocena w oceny:
+dla ocena w oceny {
     pisz(ocena)
+}
