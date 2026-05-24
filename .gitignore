@@ -1,6 +1,10 @@
 # ANTLR4 - wygenerowane pliki parsera
-parser/gen/
+Kodek/src/main/java/AGH/parser/gen/
 parser/*.jar
+Kodek/src/main/java/AGH/parser/*.jar
+
+# Maven - artefakty budowania
+Kodek/target/
 
 # Java - skompilowane klasy
 *.class

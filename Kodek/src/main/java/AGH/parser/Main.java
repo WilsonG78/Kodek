@@ -1,3 +1,5 @@
+package AGH.parser;
+
 import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.tree.*;
 import java.nio.charset.StandardCharsets;
@@ -40,7 +42,7 @@ public class Main {
         System.out.println("║         Drzewo parsowania            ║");
         System.out.println("╚══════════════════════════════════════╝");
 
-        tokens.reset();
+        tokens.seek(0);
         KodekParser parser = new KodekParser(tokens);
         parser.removeErrorListeners();
         final int[] errors = {0};
