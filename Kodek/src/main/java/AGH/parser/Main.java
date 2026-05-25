@@ -31,9 +31,9 @@ public class Main {
             if (t.getType() == Token.EOF) break;
             String name = KodekParser.VOCABULARY.getDisplayName(t.getType());
             String text = t.getText()
-                .replace("\n", "\\n")
-                .replace("\t", "\\t")
-                .replace("\r", "\\r");
+                    .replace("\n", "\\n")
+                    .replace("\t", "\\t")
+                    .replace("\r", "\\r");
             System.out.printf("  %-20s '%s'  (linia %d)%n", name, text, t.getLine());
         }
 
@@ -64,6 +64,20 @@ public class Main {
         } else {
             System.out.printf("Znaleziono %d błąd(ów) składniowych.%n", errors[0]);
         }
+
+        // Generowanie kodu C
+        CGenerator generator = new CGenerator();
+        String cCode = generator.generate(tree);
+        java.nio.file.Files.writeString(java.nio.file.Path.of("output.c"), cCode);
+        System.out.println("Kod C zapisany do output.c");
+
+        // Kompilacja
+        new ProcessBuilder("gcc", "output.c", "-o", "output", "-lm")
+                .inheritIO().start().waitFor();
+
+        // Uruchomienie
+        new ProcessBuilder("./output")
+                .inheritIO().start().waitFor();
     }
 
     private static String prettyTree(ParseTree node, KodekParser parser, int depth) {
