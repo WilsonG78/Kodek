@@ -1,0 +1,15 @@
+# Test list i for-each
+zmienna lista oceny = [5, 4, 3, 5, 2]
+dla ocena w oceny {
+    pisz(ocena)
+    pisz(" ")
+}
+piszln("")
+piszln(rozmiar(oceny))
+
+# Test dodaj
+zmienna lista buf
+dodaj(buf, 10)
+dodaj(buf, 20)
+dodaj(buf, 30)
+piszln(rozmiar(buf))

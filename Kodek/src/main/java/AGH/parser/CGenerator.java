@@ -2,69 +2,81 @@ package AGH.parser;
 
 import org.antlr.v4.runtime.tree.*;
 import org.antlr.v4.runtime.*;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
- * CGenerator - przechodzi po drzewie parsowania Kodek
- * i generuje odpowiedni kod w języku C.
+ * CGenerator – przechodzi po drzewie parsowania Kodek
+ * i generuje poprawny kod w języku C.
  *
- * Użycie w Main.java:
- *   CGenerator gen = new CGenerator();
- *   String cCode = gen.generate(tree);
- *   System.out.println(cCode);
- *   // lub zapisz do pliku .c
+ * Naprawione błędy v2:
+ *  - definicje funkcji są emitowane PRZED main() (C nie pozwala na zagnieżdżanie funkcji)
+ *  - tablica symboli jest warstwowa (scoped) – oddzielne zakresy dla bloków/funkcji
+ *  - czytaj(tekst) generuje bufor char[256] – bez segfaultu
+ *  - deklaracja lista nie produkuje podwójnego średnika
+ *  - rozmiar listy jest pobierany z AST, nie przez split(",")
+ *  - pisz/piszln używa inferencji typów (typeOf) zamiast guessType
+ *  - góra() / dół() zaimplementowane jako helper w C
+ *  - dodaj(lista, elem) generuje listName[listName_len++] = elem
+ *  - dla-w (for-each) używa scoped zmiennej iteratora
+ *  - srand() wywoływane raz na początku main()
  */
 public class CGenerator extends KodekBaseVisitor<String> {
 
-    // Tablica symboli: nazwa zmiennej -> typ (np. "liczba", "tekst", itp.)
-    private final Map<String, String> symbolTable = new HashMap<>();
+    // =========================================================
+    //  TABLICA SYMBOLI – ZAKRESY (SCOPE STACK)
+    // =========================================================
 
-    // Aktualny poziom wcięcia (dla czytelności generowanego kodu C)
+    /** Stos zakresów: peek() = bieżący zakres (najgłębszy). */
+    private final Deque<Map<String, String>> scopeStack = new ArrayDeque<>();
+
+    private void pushScope() { scopeStack.push(new HashMap<>()); }
+    private void popScope()  { if (!scopeStack.isEmpty()) scopeStack.pop(); }
+
+    /** Deklaruje zmienną w bieżącym (najgłębszym) zakresie. */
+    private void declareVar(String name, String type) {
+        if (!scopeStack.isEmpty()) scopeStack.peek().put(name, type);
+    }
+
+    /** Szuka zmiennej od najgłębszego do globalnego zakresu. */
+    private String lookupVar(String name) {
+        for (Map<String, String> scope : scopeStack) {
+            if (scope.containsKey(name)) return scope.get(name);
+        }
+        return null;
+    }
+
+    // =========================================================
+    //  TYPY ZWRACANE PRZEZ FUNKCJE (KODEK → C)
+    // =========================================================
+
+    /** Typ zwracany przez każdą zdefiniowaną funkcję (typ Kodek). */
+    private final Map<String, String> functionReturnTypes = new HashMap<>();
+
+    // =========================================================
+    //  WCIĘCIA
+    // =========================================================
+
     private int indentLevel = 0;
+    private String indent() { return "    ".repeat(indentLevel); }
+
+    /** Maksymalny rozmiar dynamicznej listy. */
+    private static final int LIST_MAX = 1000;
 
     // =========================================================
-    //  PUNKT WEJŚCIA
+    //  MAPOWANIE TYPÓW
     // =========================================================
 
-    /** Generuje pełny plik .c z drzewa parsowania. */
-    public String generate(org.antlr.v4.runtime.tree.ParseTree tree) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("#include <stdio.h>\n");
-        sb.append("#include <stdlib.h>\n");
-        sb.append("#include <string.h>\n");
-        sb.append("#include <math.h>\n");
-        sb.append("\n");
-        sb.append("int main() {\n");
-        indentLevel = 1;
-        sb.append(visit(tree));
-        indentLevel = 0;
-        sb.append("    return 0;\n");
-        sb.append("}\n");
-        return sb.toString();
-    }
-
-    // =========================================================
-    //  POMOCNICZE
-    // =========================================================
-
-    private String indent() {
-        return "    ".repeat(indentLevel);
-    }
-
-    /** Mapuje typ Kodek na typ C. */
     private String toCType(String kodekType) {
         switch (kodekType) {
             case "liczba":   return "int";
             case "ułamek":   return "double";
-            case "tekst":    return "char*";
+            case "tekst":    return "char*";   // dla parametrów funkcji
             case "logiczny": return "int";
-            case "lista":    return "int"; // uproszczenie - lista intów
+            case "lista":    return "int";
             default:         return "int";
         }
     }
 
-    /** Zwraca format printf dla danego typu. */
     private String printfFormat(String kodekType) {
         switch (kodekType) {
             case "liczba":   return "%d";
@@ -75,16 +87,174 @@ public class CGenerator extends KodekBaseVisitor<String> {
         }
     }
 
-    /** Próbuje odgadnąć typ wyrażenia na podstawie jego zawartości. */
-    private String guessType(String expr) {
-        expr = expr.trim();
-        if (expr.startsWith("\""))        return "tekst";
-        if (expr.contains("."))           return "ułamek";
-        if (expr.equals("0") || expr.equals("1")
-                || expr.equals("prawda") || expr.equals("fałsz")) return "logiczny";
-        // sprawdź tablicę symboli
-        if (symbolTable.containsKey(expr)) return symbolTable.get(expr);
-        return "liczba"; // domyślnie
+    // =========================================================
+    //  INFERENCJA TYPÓW WYRAŻEŃ
+    // =========================================================
+
+    private String typeOf(KodekParser.ExpressionContext ctx) {
+        return typeOfLogicalOr(ctx.logicalOr());
+    }
+
+    private String typeOfLogicalOr(KodekParser.LogicalOrContext ctx) {
+        if (ctx.logicalAnd().size() > 1) return "logiczny";
+        return typeOfLogicalAnd(ctx.logicalAnd(0));
+    }
+
+    private String typeOfLogicalAnd(KodekParser.LogicalAndContext ctx) {
+        if (ctx.negation().size() > 1) return "logiczny";
+        return typeOfNegation(ctx.negation(0));
+    }
+
+    private String typeOfNegation(KodekParser.NegationContext ctx) {
+        if (ctx.negation() != null) return "logiczny";  // 'nie' X
+        return typeOfComparison(ctx.comparison());
+    }
+
+    private String typeOfComparison(KodekParser.ComparisonContext ctx) {
+        if (!ctx.compOp().isEmpty()) return "logiczny";
+        return typeOfArithmetic(ctx.arithmetic(0));
+    }
+
+    private String typeOfArithmetic(KodekParser.ArithmeticContext ctx) {
+        for (KodekParser.TermContext t : ctx.term()) {
+            if ("ułamek".equals(typeOfTerm(t))) return "ułamek";
+        }
+        return typeOfTerm(ctx.term(0));
+    }
+
+    private String typeOfTerm(KodekParser.TermContext ctx) {
+        for (KodekParser.FactorContext f : ctx.factor()) {
+            if ("ułamek".equals(typeOfFactor(f))) return "ułamek";
+        }
+        return typeOfFactor(ctx.factor(0));
+    }
+
+    private String typeOfFactor(KodekParser.FactorContext ctx) {
+        if (ctx.factor() != null) return "ułamek";  // potęgowanie → pow() → double
+        return typeOfBase(ctx.base());
+    }
+
+    private String typeOfBase(KodekParser.BaseContext ctx) {
+        if (ctx.expression() != null) return typeOf(ctx.expression());
+        return typeOfAtom(ctx.atom());
+    }
+
+    private String typeOfAtom(KodekParser.AtomContext ctx) {
+        if (ctx.NUMBER()       != null) return ctx.NUMBER().getText().contains(".") ? "ułamek" : "liczba";
+        if (ctx.STRING()       != null) return "tekst";
+        if (ctx.BOOLEAN()      != null) return "logiczny";
+        if (ctx.listLiteral()  != null) return "lista";
+        if (ctx.functionCall() != null) return typeOfFunctionCall(ctx.functionCall());
+        if (ctx.listAccess()   != null) return "liczba";
+        if (ctx.ID()           != null) {
+            String t = lookupVar(ctx.ID().getText());
+            return t != null ? t : "liczba";
+        }
+        return "liczba";
+    }
+
+    private String typeOfFunctionCall(KodekParser.FunctionCallContext ctx) {
+        switch (ctx.ID().getText()) {
+            case "pierwiastek":         return "ułamek";
+            case "zaokrąglij":          return "liczba";
+            case "losowa_liczba":       return "liczba";
+            case "długość":             return "liczba";
+            case "rozmiar":             return "liczba";
+            case "góra": case "dół":    return "tekst";
+            default:
+                String r = functionReturnTypes.get(ctx.ID().getText());
+                return r != null ? r : "liczba";
+        }
+    }
+
+    // =========================================================
+    //  PUNKT WEJŚCIA
+    // =========================================================
+
+    /**
+     * Generuje pełny plik .c z drzewa parsowania.
+     * Dwie fazy:
+     *   1. Definicje funkcji – emitowane PRZED int main()
+     *   2. Reszta instrukcji – wewnątrz int main()
+     */
+    public String generate(org.antlr.v4.runtime.tree.ParseTree tree) {
+        pushScope();  // zakres globalny
+
+        KodekParser.ProgramContext programCtx = (KodekParser.ProgramContext) tree;
+
+        // Faza 0: wstępne skanowanie – rejestruj typy zwracane przez funkcje
+        for (KodekParser.StatementContext stmt : programCtx.statement()) {
+            KodekParser.FunctionDefContext fctx = extractFunctionDef(stmt);
+            if (fctx != null && fctx.typeName() != null) {
+                functionReturnTypes.put(fctx.ID().getText(), fctx.typeName().getText());
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+        // Nagłówki
+        sb.append("#include <stdio.h>\n");
+        sb.append("#include <stdlib.h>\n");
+        sb.append("#include <string.h>\n");
+        sb.append("#include <math.h>\n");
+        sb.append("#include <ctype.h>\n");
+        sb.append("#include <time.h>\n");
+        sb.append("\n");
+
+        // Funkcje pomocnicze Kodek (góra, dół, itp.)
+        sb.append(generateHelpers());
+        sb.append("\n");
+
+        // Faza 1: definicje funkcji na poziomie pliku (przed main)
+        for (KodekParser.StatementContext stmt : programCtx.statement()) {
+            KodekParser.FunctionDefContext fctx = extractFunctionDef(stmt);
+            if (fctx != null) {
+                indentLevel = 0;
+                sb.append(visitFunctionDef(fctx));
+                sb.append("\n");
+            }
+        }
+
+        // Faza 2: main()
+        sb.append("int main() {\n");
+        indentLevel = 1;
+        sb.append(indent()).append("srand((unsigned int)time(NULL));\n");
+
+        for (KodekParser.StatementContext stmt : programCtx.statement()) {
+            if (extractFunctionDef(stmt) == null) {
+                sb.append(visit(stmt));
+            }
+        }
+
+        indentLevel = 0;
+        sb.append("    return 0;\n");
+        sb.append("}\n");
+
+        popScope();
+        return sb.toString();
+    }
+
+    /** Wyciąga FunctionDefContext ze Statement, lub null jeśli to nie definicja funkcji. */
+    private KodekParser.FunctionDefContext extractFunctionDef(KodekParser.StatementContext stmt) {
+        if (stmt.blockStmt() != null && stmt.blockStmt().functionDef() != null) {
+            return stmt.blockStmt().functionDef();
+        }
+        return null;
+    }
+
+    /** Generuje pomocnicze funkcje C dołączane przed main(). */
+    private String generateHelpers() {
+        return "/* ===== Funkcje pomocnicze Kodek ===== */\n"
+             + "char* _kodek_gora(const char* s) {\n"
+             + "    static char r[1024]; int i;\n"
+             + "    for (i = 0; s[i] && i < 1023; i++) r[i] = toupper((unsigned char)s[i]);\n"
+             + "    r[i] = '\\0'; return r;\n"
+             + "}\n"
+             + "char* _kodek_dol(const char* s) {\n"
+             + "    static char r[1024]; int i;\n"
+             + "    for (i = 0; s[i] && i < 1023; i++) r[i] = tolower((unsigned char)s[i]);\n"
+             + "    r[i] = '\\0'; return r;\n"
+             + "}\n";
     }
 
     // =========================================================
@@ -93,6 +263,7 @@ public class CGenerator extends KodekBaseVisitor<String> {
 
     @Override
     public String visitProgram(KodekParser.ProgramContext ctx) {
+        // Używany przy bezpośrednim wywołaniu visitora (np. testy)
         StringBuilder sb = new StringBuilder();
         for (KodekParser.StatementContext stmt : ctx.statement()) {
             sb.append(visit(stmt));
@@ -112,13 +283,15 @@ public class CGenerator extends KodekBaseVisitor<String> {
     @Override
     public String visitSimpleStmt(KodekParser.SimpleStmtContext ctx) {
         String inner = visit(ctx.getChild(0));
-        // proste instrukcje kończą się średnikiem
         return indent() + inner + ";\n";
     }
 
     @Override
     public String visitBlockStmt(KodekParser.BlockStmtContext ctx) {
-        // bloki (if, for, while, funkcja) same dodają wcięcia
+        if (ctx.functionDef() != null) {
+            // Zagnieżdżone definicje funkcji są niedozwolone w C
+            return indent() + "/* BŁĄD: definicja funkcji wewnątrz bloku jest niedozwolona w C */\n";
+        }
         return visit(ctx.getChild(0));
     }
 
@@ -128,32 +301,74 @@ public class CGenerator extends KodekBaseVisitor<String> {
 
     @Override
     public String visitVarDecl(KodekParser.VarDeclContext ctx) {
-        String type    = ctx.typeName().getText();
-        String name    = ctx.ID().getText();
-        symbolTable.put(name, type);
+        String type = ctx.typeName().getText();
+        String name = ctx.ID().getText();
+        declareVar(name, type);
 
-        String cType = toCType(type);
-
-        if (type.equals("lista")) {
-            // zmienna lista oceny = [5, 4, 3]
+        // --- tekst: char name[256] zamiast char* (bezpieczne) ---
+        if (type.equals("tekst")) {
             if (ctx.expression() != null) {
-                String listExpr = visit(ctx.expression()); // np. "{5, 4, 3}"
-                // policz elementy (liczba przecinków + 1)
-                int size = listExpr.split(",").length;
-                return cType + " " + name + "[] = " + listExpr + ";\n"
-                        + indent() + "int " + name + "_len = " + size;
+                String val = visit(ctx.expression());
+                return "char " + name + "[256] = " + val;
+            }
+            return "char " + name + "[256] = \"\"";
+        }
+
+        // --- lista: int name[] + int name_len ---
+        if (type.equals("lista")) {
+            declareVar(name + "_len", "liczba");
+            if (ctx.expression() != null) {
+                // Pobierz rozmiar z AST (nie przez split(",") !)
+                KodekParser.ListLiteralContext listLit = extractListLiteral(ctx.expression());
+                int size = (listLit != null) ? listLit.expression().size() : 0;
+                String listExpr = visit(ctx.expression());
+                // Dwie deklaracje w jednej linii – visitSimpleStmt doda ";" na końcu drugiej
+                return "int " + name + "[] = " + listExpr + "; int " + name + "_len = " + size;
             } else {
-                return cType + " *" + name + " = NULL;\n"
-                     + indent() + "int " + name + "_len = 0;";
+                return "int " + name + "[" + LIST_MAX + "]; int " + name + "_len = 0";
             }
         }
 
+        String cType = toCType(type);
         if (ctx.expression() != null) {
-            String val = visit(ctx.expression());
-            return cType + " " + name + " = " + val;
-        } else {
-            return cType + " " + name;
+            return cType + " " + name + " = " + visit(ctx.expression());
         }
+        return cType + " " + name;
+    }
+
+    /**
+     * Próbuje wyciągnąć ListLiteralContext z wyrażenia (gdy expression jest prostym literałem listy).
+     * Przechodzi przez łańcuch: expression → logicalOr → ... → atom → listLiteral
+     */
+    private KodekParser.ListLiteralContext extractListLiteral(KodekParser.ExpressionContext expr) {
+        try {
+            KodekParser.AtomContext atom = expr
+                .logicalOr().logicalAnd(0)
+                .negation(0).comparison()
+                .arithmetic(0).term(0)
+                .factor(0).base().atom();
+            return (atom != null) ? atom.listLiteral() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Próbuje wyciągnąć prostą nazwę zmiennej z wyrażenia (gdy expression to samo ID).
+     */
+    private String extractSimpleId(KodekParser.ExpressionContext expr) {
+        try {
+            KodekParser.AtomContext atom = expr
+                .logicalOr().logicalAnd(0)
+                .negation(0).comparison()
+                .arithmetic(0).term(0)
+                .factor(0).base().atom();
+            if (atom != null && atom.ID() != null
+                    && atom.functionCall() == null && atom.listAccess() == null) {
+                return atom.ID().getText();
+            }
+        } catch (Exception e) { /* nie jest prostym ID */ }
+        return null;
     }
 
     // =========================================================
@@ -163,6 +378,7 @@ public class CGenerator extends KodekBaseVisitor<String> {
     @Override
     public String visitAssignment(KodekParser.AssignmentContext ctx) {
         String name = ctx.ID().getText();
+        String varType = lookupVar(name);
 
         if (ctx.expression().size() == 2) {
             // lista[i] = val
@@ -170,8 +386,11 @@ public class CGenerator extends KodekBaseVisitor<String> {
             String val   = visit(ctx.expression(1));
             return name + "[" + index + "] = " + val;
         } else {
-            // zmienna = wyrażenie
             String val = visit(ctx.expression(0));
+            // tekst: przypisanie przez strcpy (char[] nie może być przypisane przez =)
+            if ("tekst".equals(varType)) {
+                return "strcpy(" + name + ", " + val + ")";
+            }
             return name + " = " + val;
         }
     }
@@ -230,7 +449,6 @@ public class CGenerator extends KodekBaseVisitor<String> {
     public String visitArithmetic(KodekParser.ArithmeticContext ctx) {
         StringBuilder sb = new StringBuilder(visit(ctx.term(0)));
         for (int i = 1; i < ctx.term().size(); i++) {
-            // operator: '+' lub '-' jest tokenem między termami
             String op = ctx.getChild(2 * i - 1).getText();
             sb.append(" ").append(op).append(" ").append(visit(ctx.term(i)));
         }
@@ -250,7 +468,6 @@ public class CGenerator extends KodekBaseVisitor<String> {
     @Override
     public String visitFactor(KodekParser.FactorContext ctx) {
         if (ctx.factor() != null) {
-            // potęgowanie: a ^ b  ->  pow(a, b)
             return "pow(" + visit(ctx.base()) + ", " + visit(ctx.factor()) + ")";
         }
         return visit(ctx.base());
@@ -266,10 +483,10 @@ public class CGenerator extends KodekBaseVisitor<String> {
 
     @Override
     public String visitAtom(KodekParser.AtomContext ctx) {
-        if (ctx.NUMBER()  != null) return ctx.NUMBER().getText();
-        if (ctx.STRING()  != null) return ctx.STRING().getText();
-        if (ctx.BOOLEAN() != null) return ctx.BOOLEAN().getText().equals("prawda") ? "1" : "0";
-        if (ctx.listLiteral() != null) return visit(ctx.listLiteral());
+        if (ctx.NUMBER()       != null) return ctx.NUMBER().getText();
+        if (ctx.STRING()       != null) return ctx.STRING().getText();
+        if (ctx.BOOLEAN()      != null) return ctx.BOOLEAN().getText().equals("prawda") ? "1" : "0";
+        if (ctx.listLiteral()  != null) return visit(ctx.listLiteral());
         if (ctx.functionCall() != null) return visit(ctx.functionCall());
         if (ctx.listAccess()   != null) return visit(ctx.listAccess());
         if (ctx.ID()           != null) return ctx.ID().getText();
@@ -297,7 +514,7 @@ public class CGenerator extends KodekBaseVisitor<String> {
     }
 
     // =========================================================
-    //  WARUNEK (condition - używany w if/while)
+    //  WARUNEK (condition – używany w if/while)
     // =========================================================
 
     @Override
@@ -325,21 +542,11 @@ public class CGenerator extends KodekBaseVisitor<String> {
     @Override
     public String visitCondNeg(KodekParser.CondNegContext ctx) {
         String first = ctx.getChild(0).getText();
-        if (first.equals("nie")) {
-            return "!(" + visit(ctx.condNeg()) + ")";
-        }
-        if (ctx.BOOLEAN() != null) {
-            return ctx.BOOLEAN().getText().equals("prawda") ? "1" : "0";
-        }
-        if (ctx.ID() != null) {
-            return ctx.ID().getText();
-        }
-        if (ctx.condition() != null) {
-            return "(" + visit(ctx.condition()) + ")";
-        }
-        if (ctx.strictComparison() != null) {
-            return visit(ctx.strictComparison());
-        }
+        if (first.equals("nie"))            return "!(" + visit(ctx.condNeg()) + ")";
+        if (ctx.BOOLEAN()          != null) return ctx.BOOLEAN().getText().equals("prawda") ? "1" : "0";
+        if (ctx.ID()               != null) return ctx.ID().getText();
+        if (ctx.condition()        != null) return "(" + visit(ctx.condition()) + ")";
+        if (ctx.strictComparison() != null) return visit(ctx.strictComparison());
         return "";
     }
 
@@ -357,28 +564,17 @@ public class CGenerator extends KodekBaseVisitor<String> {
     @Override
     public String visitIfStmt(KodekParser.IfStmtContext ctx) {
         StringBuilder sb = new StringBuilder();
-
-        // Zbieramy wszystkie bloki (condition + block naprzemiennie)
-        // Struktura w drzewie: 'jeśli' '(' cond ')' block
-        //                      ('inaczej' 'jeśli' '(' cond ')' block)*
-        //                      ('inaczej' block)?
-        //
-        // ctx.condition() zwraca listę wszystkich warunków
-        // ctx.block()     zwraca listę wszystkich bloków
-
         for (int i = 0; i < ctx.condition().size(); i++) {
             String keyword = (i == 0) ? "if" : " else if";
             sb.append(indent()).append(keyword)
               .append(" (").append(visit(ctx.condition(i))).append(") ");
             sb.append(visitBlock(ctx.block(i)));
         }
-
-        // else (ostatni blok jeśli jest więcej bloków niż warunków)
+        // else – gdy jest więcej bloków niż warunków
         if (ctx.block().size() > ctx.condition().size()) {
             sb.append(indent()).append(" else ");
             sb.append(visitBlock(ctx.block(ctx.block().size() - 1)));
         }
-
         return sb.toString();
     }
 
@@ -391,33 +587,49 @@ public class CGenerator extends KodekBaseVisitor<String> {
         StringBuilder sb = new StringBuilder();
         String varName = ctx.ID().getText();
 
-        if (ctx.getChild(2).getText().equals("od")) {
-            // dla k od 1 do 10 { ... }
+        if (ctx.expression().size() == 2) {
+            // === dla k od 1 do 10 { ... } ===
             String from = visit(ctx.expression(0));
             String to   = visit(ctx.expression(1));
+
+            pushScope();
+            declareVar(varName, "liczba");
+
             sb.append(indent())
               .append("for (int ").append(varName).append(" = ").append(from)
               .append("; ").append(varName).append(" <= ").append(to)
               .append("; ").append(varName).append("++) ");
             sb.append(visitBlock(ctx.block()));
+
+            popScope();
+
         } else {
-            // dla ocena w oceny { ... }  ->  for-each po liście
-            String listName = visit(ctx.expression(0));
+            // === dla ocena w oceny { ... } ===
+            // Pobierz nazwę zmiennej listy jeśli wyrażenie jest prostym ID
+            String listName = extractSimpleId(ctx.expression(0));
+            String listExpr = (listName != null) ? listName : visit(ctx.expression(0));
+
+            pushScope();
+            declareVar(varName, "liczba");  // typ elementu – uproszczenie: int
+
             sb.append(indent())
-              .append("for (int _i = 0; _i < ").append(listName).append("_len; _i++) {\n");
+              .append("for (int _i = 0; _i < ").append(listExpr).append("_len; _i++) {\n");
             indentLevel++;
-            // typ elementu - uproszczenie: int
-            String elemType = symbolTable.getOrDefault(listName, "lista");
-            String cElemType = elemType.equals("lista") ? "int" : toCType(elemType);
-            sb.append(indent()).append(cElemType).append(" ").append(varName)
-              .append(" = ").append(listName).append("[_i];\n");
-            // wnętrze bloku (bez nawiasów klamrowych bo już je otwieramy)
+
+            sb.append(indent()).append("int ").append(varName)
+              .append(" = ").append(listExpr).append("[_i];\n");
+
+            // Odwiedź instrukcje bloku bezpośrednio (zakres iteratora jest już otwarty)
             for (KodekParser.StatementContext stmt : ctx.block().statement()) {
                 sb.append(visit(stmt));
             }
+
             indentLevel--;
             sb.append(indent()).append("}\n");
+
+            popScope();
         }
+
         return sb.toString();
     }
 
@@ -439,9 +651,11 @@ public class CGenerator extends KodekBaseVisitor<String> {
         StringBuilder sb = new StringBuilder();
         sb.append("{\n");
         indentLevel++;
+        pushScope();
         for (KodekParser.StatementContext stmt : ctx.statement()) {
             sb.append(visit(stmt));
         }
+        popScope();
         indentLevel--;
         sb.append(indent()).append("}\n");
         return sb.toString();
@@ -453,38 +667,56 @@ public class CGenerator extends KodekBaseVisitor<String> {
 
     @Override
     public String visitFunctionDef(KodekParser.FunctionDefContext ctx) {
-        StringBuilder sb = new StringBuilder();
+        String name = ctx.ID().getText();
+        String kodekReturnType = (ctx.typeName() != null) ? ctx.typeName().getText() : "void";
+        functionReturnTypes.put(name, kodekReturnType);
 
-        // typ zwracany
-        String returnType = "void";
-        if (ctx.typeName() != null) {
-            returnType = toCType(ctx.typeName().getText());
+        // Mapuj typ zwracany
+        String cReturnType;
+        if (kodekReturnType.equals("void")) {
+            cReturnType = "void";
+        } else if (kodekReturnType.equals("tekst")) {
+            cReturnType = "char*";
+        } else {
+            cReturnType = toCType(kodekReturnType);
         }
 
-        String name = ctx.ID().getText();
-        sb.append(returnType).append(" ").append(name).append("(");
+        StringBuilder sb = new StringBuilder();
+        sb.append(cReturnType).append(" ").append(name).append("(");
 
+        pushScope();  // zakres parametrów + ciała funkcji
         if (ctx.paramList() != null) {
             sb.append(visit(ctx.paramList()));
         }
-        sb.append(") ");
+        sb.append(") {\n");
+        indentLevel++;
 
-        sb.append(visitBlock(ctx.block()));
+        // Odwiedź instrukcje bloku bezpośrednio – parametry są już w tym zakresie
+        for (KodekParser.StatementContext stmt : ctx.block().statement()) {
+            sb.append(visit(stmt));
+        }
+
+        indentLevel--;
+        sb.append(indent()).append("}\n");
+        popScope();
+
         return sb.toString();
     }
 
     @Override
     public String visitParamList(KodekParser.ParamListContext ctx) {
         StringBuilder sb = new StringBuilder();
-        // paramList: typeName ID (',' typeName ID)*
-        // dzieci: type0 id0 ',' type1 id1 ...
-        int paramCount = ctx.typeName().size();
-        for (int i = 0; i < paramCount; i++) {
+        for (int i = 0; i < ctx.typeName().size(); i++) {
             if (i > 0) sb.append(", ");
-            String type = ctx.typeName(i).getText();
+            String type  = ctx.typeName(i).getText();
             String pname = ctx.ID(i).getText();
-            symbolTable.put(pname, type);
-            sb.append(toCType(type)).append(" ").append(pname);
+            declareVar(pname, type);
+            // tekst jako char* w parametrach – poprawny C dla przekazywania przez wskaźnik
+            if (type.equals("tekst")) {
+                sb.append("char* ").append(pname);
+            } else {
+                sb.append(toCType(type)).append(" ").append(pname);
+            }
         }
         return sb.toString();
     }
@@ -493,39 +725,52 @@ public class CGenerator extends KodekBaseVisitor<String> {
     public String visitFunctionCall(KodekParser.FunctionCallContext ctx) {
         String name = ctx.ID().getText();
 
-        // Wbudowane funkcje Kodek -> odpowiedniki w C
+        // Jeśli użytkownik zdefiniował funkcję o tej nazwie, wywołaj ją bezpośrednio
+        // (user-defined functions mają pierwszeństwo nad wbudowanymi)
+        if (functionReturnTypes.containsKey(name)) {
+            StringBuilder sb = new StringBuilder(name).append("(");
+            if (ctx.argumentList() != null) sb.append(visit(ctx.argumentList()));
+            sb.append(")");
+            return sb.toString();
+        }
+
         switch (name) {
-            case "pierwiastek":         name = "sqrt";  break;
-            case "wartość_bezwzględna": name = "abs";   break;
-            case "zaokrąglij":          name = "round"; break;
+            case "pierwiastek":
+                name = "sqrt"; break;
+            case "wartość_bezwzględna":
+                name = "abs"; break;
+            case "zaokrąglij":
+                name = "round"; break;
+            case "góra":
+                name = "_kodek_gora"; break;
+            case "dół":
+                name = "_kodek_dol"; break;
             case "losowa_liczba":
-                // losowa_liczba(min, max) -> (rand() % (max-min+1) + min)
-                if (ctx.argumentList() != null) {
+                if (ctx.argumentList() != null && ctx.argumentList().expression().size() >= 2) {
                     String min = visit(ctx.argumentList().expression(0));
                     String max = visit(ctx.argumentList().expression(1));
                     return "(rand() % (" + max + " - " + min + " + 1) + " + min + ")";
                 }
-                break;
+                return "rand()";
             case "długość":
                 if (ctx.argumentList() != null) {
                     return "strlen(" + visit(ctx.argumentList().expression(0)) + ")";
                 }
-                break;
-            case "góra":
-                // brak prostego odpowiednika w C - wymagałoby pętli; zostawiamy jako TODO
-                break;
-            case "dół":
-                break;
-            case "dodaj":
-                // dodaj(lista, element) - uproszczenie: nie obsługujemy dynamicznych list
-                // TODO: zaimplementować z realloc
-                return "/* dodaj - TODO */";
+                return "0";
             case "rozmiar":
                 if (ctx.argumentList() != null) {
                     String listName = visit(ctx.argumentList().expression(0));
                     return listName + "_len";
                 }
-                break;
+                return "0";
+            case "dodaj":
+                // dodaj(lista, element) → lista[lista_len++] = element
+                if (ctx.argumentList() != null && ctx.argumentList().expression().size() >= 2) {
+                    String listName = visit(ctx.argumentList().expression(0));
+                    String elem     = visit(ctx.argumentList().expression(1));
+                    return listName + "[" + listName + "_len++] = " + elem;
+                }
+                return "/* dodaj: nieprawidłowe argumenty */";
         }
 
         StringBuilder sb = new StringBuilder(name).append("(");
@@ -558,8 +803,9 @@ public class CGenerator extends KodekBaseVisitor<String> {
     @Override
     public String visitWriteStmt(KodekParser.WriteStmtContext ctx) {
         boolean newline = ctx.getChild(0).getText().equals("piszln");
+        // Inferencja typu z AST (nie ze stringa) → poprawny format printf
+        String type = typeOf(ctx.expression());
         String expr = visit(ctx.expression());
-        String type = guessType(expr);
         String fmt  = printfFormat(type) + (newline ? "\\n" : "");
         return "printf(\"" + fmt + "\", " + expr + ")";
     }
@@ -567,13 +813,14 @@ public class CGenerator extends KodekBaseVisitor<String> {
     @Override
     public String visitReadStmt(KodekParser.ReadStmtContext ctx) {
         String varName = ctx.ID().getText();
-        String type    = symbolTable.getOrDefault(varName, "liczba");
-        String fmt     = printfFormat(type);
-        // dla tekstu potrzebny bufor - uproszczenie
+        String type = lookupVar(varName);
+        if (type == null) type = "liczba";
+
         if (type.equals("tekst")) {
-            return "scanf(\"" + fmt + "\", " + varName + ")";
+            // char[256] – bezpieczny bufor, brak segfaultu
+            return "scanf(\"%255s\", " + varName + ")";
         }
-        return "scanf(\"" + fmt + "\", &" + varName + ")";
+        return "scanf(\"" + printfFormat(type) + "\", &" + varName + ")";
     }
 
     // =========================================================
@@ -585,10 +832,9 @@ public class CGenerator extends KodekBaseVisitor<String> {
         if (ctx.getChild(0).getText().equals("otwórz")) {
             String path   = visit(ctx.expression());
             String handle = ctx.ID().getText();
-            symbolTable.put(handle, "plik");
+            declareVar(handle, "plik");
             return "FILE *" + handle + " = fopen(" + path + ", \"r\")";
         } else {
-            // zamknij
             return "fclose(" + ctx.ID().getText() + ")";
         }
     }

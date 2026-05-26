@@ -98,6 +98,12 @@
               <goals><goal>antlr4</goal></goals>
             </execution>
           </executions>
+          <configuration>
+            <!-- Generuj interfejs Visitor (potrzebny dla CGenerator) -->
+            <visitor>true</visitor>
+            <!-- Listener też zostawiamy dla przyszłych zastosowań -->
+            <listener>true</listener>
+          </configuration>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -105,6 +111,14 @@
       <plugin>
         <groupId>org.antlr</groupId>
         <artifactId>antlr4-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.3.0</version>
+        <configuration>
+          <mainClass>AGH.parser.Main</mainClass>
+        </configuration>
       </plugin>
     </plugins>
   </build>

@@ -1,0 +1,13 @@
+# Test funkcji - sprawdza że definicja jest przed main()
+funkcja dodaj(liczba a, liczba b) zwraca liczba {
+    zwróć a + b
+}
+
+funkcja przywitaj(tekst imie) {
+    pisz("Witaj, ")
+    piszln(imie)
+}
+
+zmienna liczba wynik = dodaj(3, 7)
+piszln(wynik)
+przywitaj("Ala")

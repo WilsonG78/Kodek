@@ -3,19 +3,45 @@ package AGH.parser;
 import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.tree.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.List;
 
+/**
+ * Punkt wejścia CLI dla języka Kodek.
+ *
+ * Użycie:
+ *   mvn exec:java -Dexec.args="program.kodek"
+ *
+ * Fazy:
+ *   1. Leksowanie  – tokenizacja pliku źródłowego
+ *   2. Parsowanie  – budowa drzewa składniowego (AST)
+ *   3. Generowanie – AST → kod C (przez CGenerator)
+ *   4. Kompilacja  – gcc output.c -o output -lm
+ *   5. Uruchomienie – ./output
+ *
+ * Poprawki v2:
+ *   - Wczesne wyjście (exit 1) przy błędach leksykalnych lub składniowych
+ *   - Sprawdzanie exit code gcc przed uruchomieniem
+ *   - Generowanie pliku C obok pliku źródłowego (nie w CWD)
+ */
 public class Main {
-    public static void main(String[] args) throws Exception {
-        String file = args.length > 0 ? args[0] : "test.kodek";
 
-        CharStream input = CharStreams.fromFileName(file, StandardCharsets.UTF_8);
+    public static void main(String[] args) throws Exception {
+        String sourceFile = args.length > 0 ? args[0] : "test.kodek";
+
+        // =================================================================
+        // Faza 1: Leksowanie
+        // =================================================================
+        CharStream input = CharStreams.fromFileName(sourceFile, StandardCharsets.UTF_8);
         KodekLexer lexer = new KodekLexer(input);
         lexer.removeErrorListeners();
+
+        final int[] lexErrors = {0};
         lexer.addErrorListener(new BaseErrorListener() {
             @Override
-            public void syntaxError(Recognizer<?,?> r, Object sym, int line, int col,
+            public void syntaxError(Recognizer<?, ?> r, Object sym, int line, int col,
                                     String msg, RecognitionException e) {
+                lexErrors[0]++;
                 System.err.printf("  [błąd leksera] %d:%d — %s%n", line, col, msg);
             }
         });
@@ -23,34 +49,37 @@ public class Main {
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         tokens.fill();
 
-        System.out.println("╔══════════════════════════════════════╗");
-        System.out.println("║           Lista tokenów              ║");
-        System.out.println("╚══════════════════════════════════════╝");
+        printBanner("Lista tokenów");
         List<Token> tokenList = tokens.getTokens();
         for (Token t : tokenList) {
             if (t.getType() == Token.EOF) break;
             String name = KodekParser.VOCABULARY.getDisplayName(t.getType());
             String text = t.getText()
-                    .replace("\n", "\\n")
-                    .replace("\t", "\\t")
-                    .replace("\r", "\\r");
+                    .replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r");
             System.out.printf("  %-20s '%s'  (linia %d)%n", name, text, t.getLine());
         }
 
+        if (lexErrors[0] > 0) {
+            System.err.printf("%nZnaleziono %d błąd(ów) leksykalnych. Przerywam.%n", lexErrors[0]);
+            System.exit(1);
+        }
+
+        // =================================================================
+        // Faza 2: Parsowanie
+        // =================================================================
         System.out.println();
-        System.out.println("╔══════════════════════════════════════╗");
-        System.out.println("║         Drzewo parsowania            ║");
-        System.out.println("╚══════════════════════════════════════╝");
+        printBanner("Drzewo parsowania");
 
         tokens.seek(0);
         KodekParser parser = new KodekParser(tokens);
         parser.removeErrorListeners();
-        final int[] errors = {0};
+
+        final int[] parseErrors = {0};
         parser.addErrorListener(new BaseErrorListener() {
             @Override
-            public void syntaxError(Recognizer<?,?> r, Object sym, int line, int col,
+            public void syntaxError(Recognizer<?, ?> r, Object sym, int line, int col,
                                     String msg, RecognitionException e) {
-                errors[0]++;
+                parseErrors[0]++;
                 System.err.printf("  [błąd składni] %d:%d — %s%n", line, col, msg);
             }
         });
@@ -58,26 +87,65 @@ public class Main {
         ParseTree tree = parser.program();
         System.out.println(prettyTree(tree, parser, 0));
 
-        System.out.println();
-        if (errors[0] == 0) {
-            System.out.println("Parsowanie zakończone pomyślnie.");
-        } else {
-            System.out.printf("Znaleziono %d błąd(ów) składniowych.%n", errors[0]);
+        if (parseErrors[0] > 0) {
+            System.err.printf("Znaleziono %d błąd(ów) składniowych. Przerywam.%n", parseErrors[0]);
+            System.exit(1);
         }
 
-        // Generowanie kodu C
+        System.out.println("Parsowanie zakończone pomyślnie.");
+
+        // =================================================================
+        // Faza 3: Generowanie kodu C
+        // =================================================================
         CGenerator generator = new CGenerator();
         String cCode = generator.generate(tree);
-        java.nio.file.Files.writeString(java.nio.file.Path.of("output.c"), cCode);
-        System.out.println("Kod C zapisany do output.c");
 
-        // Kompilacja
-        new ProcessBuilder("gcc", "output.c", "-o", "output", "-lm")
-                .inheritIO().start().waitFor();
+        // Zapisz obok pliku źródłowego
+        Path sourceDir = Path.of(sourceFile).toAbsolutePath().getParent();
+        Path cFile  = (sourceDir != null ? sourceDir : Path.of(".")).resolve("output.c");
+        Path binary = (sourceDir != null ? sourceDir : Path.of(".")).resolve("output");
 
-        // Uruchomienie
-        new ProcessBuilder("./output")
-                .inheritIO().start().waitFor();
+        java.nio.file.Files.writeString(cFile, cCode, StandardCharsets.UTF_8);
+        System.out.printf("%nKod C zapisany do: %s%n", cFile);
+
+        // =================================================================
+        // Faza 4: Kompilacja GCC
+        // =================================================================
+        System.out.println("Kompilowanie...");
+        int compileExit = new ProcessBuilder("gcc",
+                cFile.toString(), "-o", binary.toString(), "-lm", "-Wall")
+                .inheritIO()
+                .start()
+                .waitFor();
+
+        if (compileExit != 0) {
+            System.err.printf("Kompilacja GCC zakończona błędem (kod %d). Przerywam.%n", compileExit);
+            System.exit(compileExit);
+        }
+
+        // =================================================================
+        // Faza 5: Uruchomienie programu
+        // =================================================================
+        System.out.println("Uruchamianie programu:");
+        System.out.println("─".repeat(40));
+
+        int runExit = new ProcessBuilder(binary.toString())
+                .inheritIO()
+                .start()
+                .waitFor();
+
+        System.out.println("─".repeat(40));
+        System.out.printf("Program zakończył się z kodem: %d%n", runExit);
+    }
+
+    // =========================================================
+    //  POMOCNICZE
+    // =========================================================
+
+    private static void printBanner(String title) {
+        System.out.printf("╔══════════════════════════════════════╗%n");
+        System.out.printf("║  %-36s║%n", title);
+        System.out.printf("╚══════════════════════════════════════╝%n");
     }
 
     private static String prettyTree(ParseTree node, KodekParser parser, int depth) {
