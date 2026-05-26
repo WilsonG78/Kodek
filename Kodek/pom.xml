@@ -116,9 +116,22 @@
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
         <version>3.3.0</version>
-        <configuration>
-          <mainClass>AGH.parser.Main</mainClass>
-        </configuration>
+        <executions>
+          <!-- mvn exec:java@cli -Dexec.args="plik.kodek" -->
+          <execution>
+            <id>cli</id>
+            <configuration>
+              <mainClass>AGH.parser.Main</mainClass>
+            </configuration>
+          </execution>
+          <!-- mvn exec:java@web -->
+          <execution>
+            <id>web</id>
+            <configuration>
+              <mainClass>AGH.parser.WebServer</mainClass>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

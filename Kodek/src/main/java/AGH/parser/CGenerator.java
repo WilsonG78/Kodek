@@ -59,9 +59,6 @@ public class CGenerator extends KodekBaseVisitor<String> {
     private int indentLevel = 0;
     private String indent() { return "    ".repeat(indentLevel); }
 
-    /** Maksymalny rozmiar dynamicznej listy. */
-    private static final int LIST_MAX = 1000;
-
     // =========================================================
     //  MAPOWANIE TYPÓW
     // =========================================================
@@ -70,9 +67,9 @@ public class CGenerator extends KodekBaseVisitor<String> {
         switch (kodekType) {
             case "liczba":   return "int";
             case "ułamek":   return "double";
-            case "tekst":    return "char*";   // dla parametrów funkcji
+            case "tekst":    return "char*";      // dla parametrów funkcji
             case "logiczny": return "int";
-            case "lista":    return "int";
+            case "lista":    return "KodekLista"; // dynamiczny vector
             default:         return "int";
         }
     }
@@ -244,7 +241,23 @@ public class CGenerator extends KodekBaseVisitor<String> {
 
     /** Generuje pomocnicze funkcje C dołączane przed main(). */
     private String generateHelpers() {
-        return "/* ===== Funkcje pomocnicze Kodek ===== */\n"
+        return "/* ===== KodekLista – dynamiczna lista (vector z C++) ===== */\n"
+             + "typedef struct { int* data; int len; int cap; } KodekLista;\n"
+             + "static void lista_init(KodekLista* l) {\n"
+             + "    l->data = NULL; l->len = 0; l->cap = 0;\n"
+             + "}\n"
+             + "static void lista_dodaj(KodekLista* l, int val) {\n"
+             + "    if (l->len >= l->cap) {\n"
+             + "        l->cap = l->cap == 0 ? 8 : l->cap * 2;\n"
+             + "        l->data = (int*)realloc(l->data, l->cap * sizeof(int));\n"
+             + "    }\n"
+             + "    l->data[l->len++] = val;\n"
+             + "}\n"
+             + "static int lista_get(KodekLista* l, int i) { return l->data[i]; }\n"
+             + "static void lista_set(KodekLista* l, int i, int val) { l->data[i] = val; }\n"
+             + "static int lista_len(KodekLista* l) { return l->len; }\n"
+             + "\n"
+             + "/* ===== Funkcje pomocnicze tekstu ===== */\n"
              + "char* _kodek_gora(const char* s) {\n"
              + "    static char r[1024]; int i;\n"
              + "    for (i = 0; s[i] && i < 1023; i++) r[i] = toupper((unsigned char)s[i]);\n"
@@ -283,6 +296,8 @@ public class CGenerator extends KodekBaseVisitor<String> {
     @Override
     public String visitSimpleStmt(KodekParser.SimpleStmtContext ctx) {
         String inner = visit(ctx.getChild(0));
+        // Deklaracje listy zwracają gotowy wieloliniowy kod (kończą się \n)
+        if (inner.endsWith("\n")) return inner;
         return indent() + inner + ";\n";
     }
 
@@ -314,19 +329,22 @@ public class CGenerator extends KodekBaseVisitor<String> {
             return "char " + name + "[256] = \"\"";
         }
 
-        // --- lista: int name[] + int name_len ---
+        // --- lista: KodekLista (dynamiczny vector) ---
         if (type.equals("lista")) {
-            declareVar(name + "_len", "liczba");
+            // Generuj gotowy wieloliniowy kod; visitSimpleStmt wykryje \n i nie doda ";"
+            StringBuilder sb = new StringBuilder();
+            sb.append(indent()).append("KodekLista ").append(name)
+              .append("; lista_init(&").append(name).append(");\n");
             if (ctx.expression() != null) {
-                // Pobierz rozmiar z AST (nie przez split(",") !)
                 KodekParser.ListLiteralContext listLit = extractListLiteral(ctx.expression());
-                int size = (listLit != null) ? listLit.expression().size() : 0;
-                String listExpr = visit(ctx.expression());
-                // Dwie deklaracje w jednej linii – visitSimpleStmt doda ";" na końcu drugiej
-                return "int " + name + "[] = " + listExpr + "; int " + name + "_len = " + size;
-            } else {
-                return "int " + name + "[" + LIST_MAX + "]; int " + name + "_len = 0";
+                if (listLit != null) {
+                    for (KodekParser.ExpressionContext elem : listLit.expression()) {
+                        sb.append(indent()).append("lista_dodaj(&").append(name)
+                          .append(", ").append(visit(elem)).append(");\n");
+                    }
+                }
             }
+            return sb.toString();
         }
 
         String cType = toCType(type);
@@ -381,10 +399,10 @@ public class CGenerator extends KodekBaseVisitor<String> {
         String varType = lookupVar(name);
 
         if (ctx.expression().size() == 2) {
-            // lista[i] = val
+            // lista[i] = val  →  lista_set(&name, i, val)
             String index = visit(ctx.expression(0));
             String val   = visit(ctx.expression(1));
-            return name + "[" + index + "] = " + val;
+            return "lista_set(&" + name + ", " + index + ", " + val + ")";
         } else {
             String val = visit(ctx.expression(0));
             // tekst: przypisanie przez strcpy (char[] nie może być przypisane przez =)
@@ -510,7 +528,8 @@ public class CGenerator extends KodekBaseVisitor<String> {
 
     @Override
     public String visitListAccess(KodekParser.ListAccessContext ctx) {
-        return ctx.ID().getText() + "[" + visit(ctx.expression()) + "]";
+        // name[i]  →  lista_get(&name, i)
+        return "lista_get(&" + ctx.ID().getText() + ", " + visit(ctx.expression()) + ")";
     }
 
     // =========================================================
@@ -613,11 +632,11 @@ public class CGenerator extends KodekBaseVisitor<String> {
             declareVar(varName, "liczba");  // typ elementu – uproszczenie: int
 
             sb.append(indent())
-              .append("for (int _i = 0; _i < ").append(listExpr).append("_len; _i++) {\n");
+              .append("for (int _i = 0; _i < lista_len(&").append(listExpr).append("); _i++) {\n");
             indentLevel++;
 
             sb.append(indent()).append("int ").append(varName)
-              .append(" = ").append(listExpr).append("[_i];\n");
+              .append(" = lista_get(&").append(listExpr).append(", _i);\n");
 
             // Odwiedź instrukcje bloku bezpośrednio (zakres iteratora jest już otwarty)
             for (KodekParser.StatementContext stmt : ctx.block().statement()) {
@@ -711,9 +730,12 @@ public class CGenerator extends KodekBaseVisitor<String> {
             String type  = ctx.typeName(i).getText();
             String pname = ctx.ID(i).getText();
             declareVar(pname, type);
-            // tekst jako char* w parametrach – poprawny C dla przekazywania przez wskaźnik
             if (type.equals("tekst")) {
+                // tekst przez wskaźnik (char*) – standardowe C
                 sb.append("char* ").append(pname);
+            } else if (type.equals("lista")) {
+                // lista przez wskaźnik – modyfikacje wewnątrz funkcji są widoczne na zewnątrz
+                sb.append("KodekLista* ").append(pname);
             } else {
                 sb.append(toCType(type)).append(" ").append(pname);
             }
@@ -760,15 +782,15 @@ public class CGenerator extends KodekBaseVisitor<String> {
             case "rozmiar":
                 if (ctx.argumentList() != null) {
                     String listName = visit(ctx.argumentList().expression(0));
-                    return listName + "_len";
+                    return "lista_len(&" + listName + ")";
                 }
                 return "0";
             case "dodaj":
-                // dodaj(lista, element) → lista[lista_len++] = element
+                // dodaj(lista, element)  →  lista_dodaj(&lista, element)
                 if (ctx.argumentList() != null && ctx.argumentList().expression().size() >= 2) {
                     String listName = visit(ctx.argumentList().expression(0));
                     String elem     = visit(ctx.argumentList().expression(1));
-                    return listName + "[" + listName + "_len++] = " + elem;
+                    return "lista_dodaj(&" + listName + ", " + elem + ")";
                 }
                 return "/* dodaj: nieprawidłowe argumenty */";
         }

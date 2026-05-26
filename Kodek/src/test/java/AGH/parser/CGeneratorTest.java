@@ -98,20 +98,22 @@ class CGeneratorTest {
     }
 
     @Test
-    @DisplayName("lista ze stałym rozmiarem (bez split(','))")
+    @DisplayName("lista → KodekLista + lista_init + lista_dodaj per element")
     void testVarDeclLista() {
         String code = generate("zmienna lista oceny = [5, 4, 3]");
-        assertContains(code, "int oceny[]");
-        assertContains(code, "{5, 4, 3}");
-        assertContains(code, "int oceny_len = 3");
+        assertContains(code, "KodekLista oceny");
+        assertContains(code, "lista_init(&oceny)");
+        assertContains(code, "lista_dodaj(&oceny, 5)");
+        assertContains(code, "lista_dodaj(&oceny, 4)");
+        assertContains(code, "lista_dodaj(&oceny, 3)");
     }
 
     @Test
-    @DisplayName("lista bez inicjalizatora → tablica o stałym rozmiarze")
+    @DisplayName("lista bez inicjalizatora → KodekLista + lista_init")
     void testVarDeclListaEmpty() {
         String code = generate("zmienna lista buf");
-        assertContains(code, "int buf[");
-        assertContains(code, "int buf_len = 0");
+        assertContains(code, "KodekLista buf");
+        assertContains(code, "lista_init(&buf)");
     }
 
     // =========================================================
@@ -133,10 +135,10 @@ class CGeneratorTest {
     }
 
     @Test
-    @DisplayName("przypisanie do listy indeksowane → []")
+    @DisplayName("przypisanie do listy indeksowane → lista_set")
     void testAssignListIndex() {
         String code = generate("zmienna lista tab = [1,2,3]\ntab[0] = 99");
-        assertContains(code, "tab[0] = 99");
+        assertContains(code, "lista_set(&tab, 0, 99)");
     }
 
     // =========================================================
@@ -245,7 +247,7 @@ class CGeneratorTest {
     }
 
     @Test
-    @DisplayName("dla w (for-each) → for z _i i elementem")
+    @DisplayName("dla w (for-each) → for z lista_len i lista_get")
     void testForEach() {
         String code = generate("""
                 zmienna lista oceny = [5, 4, 3]
@@ -253,8 +255,8 @@ class CGeneratorTest {
                     pisz(ocena)
                 }
                 """);
-        assertContains(code, "for (int _i = 0; _i < oceny_len; _i++)");
-        assertContains(code, "int ocena = oceny[_i]");
+        assertContains(code, "lista_len(&oceny)");
+        assertContains(code, "lista_get(&oceny, _i)");
     }
 
     @Test
@@ -394,20 +396,20 @@ class CGeneratorTest {
     }
 
     @Test
-    @DisplayName("rozmiar → listName_len")
+    @DisplayName("rozmiar → lista_len(&name)")
     void testRozmiar() {
         String code = generate("zmienna lista tab = [1,2,3]\npiszln(rozmiar(tab))");
-        assertContains(code, "tab_len");
+        assertContains(code, "lista_len(&tab)");
     }
 
     @Test
-    @DisplayName("dodaj → listName[listName_len++] = elem")
+    @DisplayName("dodaj → lista_dodaj(&name, elem)")
     void testDodaj() {
         String code = generate("""
                 zmienna lista buf
                 dodaj(buf, 42)
                 """);
-        assertContains(code, "buf[buf_len++] = 42");
+        assertContains(code, "lista_dodaj(&buf, 42)");
     }
 
     // =========================================================
