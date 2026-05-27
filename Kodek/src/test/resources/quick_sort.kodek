@@ -1,0 +1,72 @@
+# Algorytm sortowania szybkiego (Quick Sort)
+# Wersja iteracyjna z symulowanym stosem rekursji
+# Pivot = ostatni element podtablicy (schemat Lomuto)
+
+zmienna lista dane = [10, 7, 8, 9, 1, 5, 3, 6]
+zmienna liczba n = rozmiar(dane)
+
+pisz("Przed sortowaniem: ")
+dla x w dane {
+    pisz(x)
+    pisz(" ")
+}
+piszln("")
+
+# Stosy symulujące rekursję (granice lewego i prawego krańca)
+zmienna lista stos_lewy
+zmienna lista stos_prawy
+zmienna liczba top = 0
+
+dodaj(stos_lewy,  0)
+dodaj(stos_prawy, n - 1)
+
+dopóki (top >= 0) {
+    # Zdejmij ze stosu
+    zmienna liczba lewy  = stos_lewy[top]
+    zmienna liczba prawy = stos_prawy[top]
+    top = top - 1
+
+    jeśli (lewy < prawy) {
+        # ---- Partycja Lomuto (pivot = dane[prawy]) ----
+        zmienna liczba pivot = dane[prawy]
+        zmienna liczba i = lewy - 1
+        zmienna liczba j = lewy
+
+        dopóki (j < prawy) {
+            jeśli (dane[j] <= pivot) {
+                i = i + 1
+                zmienna liczba tmp = dane[i]
+                dane[i] = dane[j]
+                dane[j] = tmp
+            }
+            j = j + 1
+        }
+
+        # Wstaw pivot na właściwą pozycję
+        zmienna liczba tmp2 = dane[i + 1]
+        dane[i + 1] = dane[prawy]
+        dane[prawy] = tmp2
+        zmienna liczba pi = i + 1
+        # -----------------------------------------------
+
+        # Wrzuć lewą połowę na stos
+        jeśli (lewy < pi) {
+            top = top + 1
+            dodaj(stos_lewy,  lewy)
+            dodaj(stos_prawy, pi - 1)
+        }
+        # Wrzuć prawą połowę na stos
+        jeśli (pi < prawy) {
+            top = top + 1
+            dodaj(stos_lewy,  pi + 1)
+            dodaj(stos_prawy, prawy)
+        }
+    }
+}
+
+pisz("Po sortowaniu  (Quick Sort):  ")
+dla x w dane {
+    pisz(x)
+    pisz(" ")
+}
+piszln("")

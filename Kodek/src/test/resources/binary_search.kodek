@@ -1,0 +1,74 @@
+# Wyszukiwanie binarne (Binary Search)
+# Działa na posortowanej liście liczb całkowitych
+# Zwraca indeks znalezionego elementu lub sygnalizuje brak
+
+zmienna lista dane = [2, 5, 8, 12, 16, 23, 38, 56, 72, 91]
+zmienna liczba n   = rozmiar(dane)
+zmienna liczba cel = 23
+
+pisz("Lista: ")
+dla x w dane {
+    pisz(x)
+    pisz(" ")
+}
+piszln("")
+pisz("Szukam: ")
+piszln(cel)
+
+zmienna liczba lewy   = 0
+zmienna liczba prawy  = n - 1
+zmienna liczba wynik  = 0 - 1   # -1 oznacza "nie znaleziono"
+zmienna logiczny znaleziono = fałsz
+
+dopóki (lewy <= prawy) {
+    zmienna liczba srodek = (lewy + prawy) / 2
+
+    jeśli (dane[srodek] == cel) {
+        wynik = srodek
+        znaleziono = prawda
+        przerwij
+    }
+    inaczej jeśli (dane[srodek] < cel) {
+        lewy = srodek + 1
+    }
+    inaczej {
+        prawy = srodek - 1
+    }
+}
+
+jeśli (znaleziono) {
+    pisz("Znaleziono na indeksie: ")
+    piszln(wynik)
+}
+inaczej {
+    piszln("Element nie istnieje w liście.")
+}
+
+# Drugi test – element, którego nie ma
+cel = 99
+pisz("Szukam: ")
+piszln(cel)
+lewy  = 0
+prawy = n - 1
+znaleziono = fałsz
+
+dopóki (lewy <= prawy) {
+    zmienna liczba srodek2 = (lewy + prawy) / 2
+    jeśli (dane[srodek2] == cel) {
+        znaleziono = prawda
+        przerwij
+    }
+    inaczej jeśli (dane[srodek2] < cel) {
+        lewy = srodek2 + 1
+    }
+    inaczej {
+        prawy = srodek2 - 1
+    }
+}
+
+jeśli (znaleziono) {
+    piszln("Znaleziono.")
+}
+inaczej {
+    piszln("Element nie istnieje w liście.")
+}

@@ -1,0 +1,73 @@
+# Algorytm sortowania przez scalanie (Merge Sort)
+# Wersja iteracyjna bottom-up – sortuje listę w porządku rosnącym
+
+zmienna lista dane = [38, 27, 43, 3, 9, 82, 10, 1]
+zmienna liczba n = rozmiar(dane)
+
+pisz("Przed sortowaniem: ")
+dla x w dane {
+    pisz(x)
+    pisz(" ")
+}
+piszln("")
+
+# Bottom-up merge sort: scalaj bloki rosnącej szerokości
+zmienna liczba szerokosc = 1
+dopóki (szerokosc < n) {
+    zmienna liczba lewy = 0
+    dopóki (lewy < n - 1) {
+        zmienna liczba srodek = lewy + szerokosc - 1
+        zmienna liczba prawy  = lewy + 2 * szerokosc - 1
+
+        # Ogranicz indeksy do granic tablicy
+        jeśli (srodek >= n) {
+            srodek = n - 1
+        }
+        jeśli (prawy >= n) {
+            prawy = n - 1
+        }
+
+        # Scal dane[lewy..srodek] z dane[srodek+1..prawy]
+        jeśli (srodek < prawy) {
+            zmienna lista bufor
+            zmienna liczba i = lewy
+            zmienna liczba j = srodek + 1
+
+            dopóki (i <= srodek oraz j <= prawy) {
+                jeśli (dane[i] <= dane[j]) {
+                    dodaj(bufor, dane[i])
+                    i = i + 1
+                }
+                inaczej {
+                    dodaj(bufor, dane[j])
+                    j = j + 1
+                }
+            }
+            dopóki (i <= srodek) {
+                dodaj(bufor, dane[i])
+                i = i + 1
+            }
+            dopóki (j <= prawy) {
+                dodaj(bufor, dane[j])
+                j = j + 1
+            }
+
+            # Skopiuj bufor z powrotem do dane
+            zmienna liczba k = 0
+            dla pos od lewy do prawy {
+                dane[pos] = bufor[k]
+                k = k + 1
+            }
+        }
+
+        lewy = lewy + 2 * szerokosc
+    }
+    szerokosc = szerokosc * 2
+}
+
+pisz("Po sortowaniu  (Merge Sort): ")
+dla x w dane {
+    pisz(x)
+    pisz(" ")
+}
+piszln("")

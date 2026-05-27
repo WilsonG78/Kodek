@@ -1,0 +1,61 @@
+# Przeszukiwanie grafu wszerz (BFS – Breadth First Search)
+# Ten sam graf co w dfs.kodek: 6 węzłów (0-5)
+# Krawędzie: 0→1, 0→2, 1→3, 1→4, 2→4, 3→5, 4→5
+# Wyznacza też najkrótsze odległości (w liczbie krawędzi) od węzła startowego
+
+zmienna liczba N = 6
+
+#       0  1  2  3  4  5
+# 0: [  0, 1, 1, 0, 0, 0 ]
+# 1: [  0, 0, 0, 1, 1, 0 ]
+# 2: [  0, 0, 0, 0, 1, 0 ]
+# 3: [  0, 0, 0, 0, 0, 1 ]
+# 4: [  0, 0, 0, 0, 0, 1 ]
+# 5: [  0, 0, 0, 0, 0, 0 ]
+zmienna lista macierz = [0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+
+# Odległości: 999 = nieosiągalny
+zmienna lista odl
+dla i od 0 do N - 1 {
+    dodaj(odl, 999)
+}
+
+# Kolejka BFS (lista + wskaźnik głowy)
+zmienna lista kolejka
+zmienna liczba glowa = 0
+zmienna liczba start = 0
+
+odl[start] = 0
+dodaj(kolejka, start)
+
+piszln("BFS od węzła 0:")
+
+dopóki (glowa < rozmiar(kolejka)) {
+    # Dequeue
+    zmienna liczba wezel = kolejka[glowa]
+    glowa = glowa + 1
+
+    pisz("Odwiedzam: ")
+    pisz(wezel)
+    pisz("  (odleglosc od startu: ")
+    pisz(odl[wezel])
+    piszln(")")
+
+    # Dodaj nieodwiedzonych sąsiadów do kolejki
+    dla j od 0 do N - 1 {
+        zmienna liczba idx = wezel * N + j
+        jeśli (macierz[idx] == 1 oraz odl[j] == 999) {
+            odl[j] = odl[wezel] + 1
+            dodaj(kolejka, j)
+        }
+    }
+}
+
+piszln("")
+piszln("Najkrotsze odleglosci od wezla 0:")
+dla i od 0 do N - 1 {
+    pisz("  do ")
+    pisz(i)
+    pisz(" = ")
+    piszln(odl[i])
+}

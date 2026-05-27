@@ -1,0 +1,85 @@
+# Algorytm sortowania przez kopcowanie (Heap Sort)
+# Używa max-kopca; heapify zaimplementowane iteracyjnie
+
+zmienna lista dane = [12, 11, 13, 5, 6, 7, 4, 15]
+zmienna liczba n = rozmiar(dane)
+
+pisz("Przed sortowaniem: ")
+dla x w dane {
+    pisz(x)
+    pisz(" ")
+}
+piszln("")
+
+# ---- Faza 1: Budowanie max-kopca ----
+# Startujemy od ostatniego węzła wewnętrznego (n/2 - 1) w dół do 0
+zmienna liczba i = n / 2 - 1
+dopóki (i >= 0) {
+    # Iteracyjne heapify w dół od pozycji i, rozmiar kopca = n
+    zmienna liczba pos = i
+    zmienna liczba hs  = n
+    zmienna logiczny gotowy = fałsz
+    dopóki (nie gotowy) {
+        zmienna liczba lewe      = 2 * pos + 1
+        zmienna liczba prawe     = 2 * pos + 2
+        zmienna liczba najwiekszy = pos
+        jeśli (lewe < hs oraz dane[lewe] > dane[najwiekszy]) {
+            najwiekszy = lewe
+        }
+        jeśli (prawe < hs oraz dane[prawe] > dane[najwiekszy]) {
+            najwiekszy = prawe
+        }
+        jeśli (najwiekszy != pos) {
+            zmienna liczba tmp = dane[pos]
+            dane[pos] = dane[najwiekszy]
+            dane[najwiekszy] = tmp
+            pos = najwiekszy
+        }
+        inaczej {
+            gotowy = prawda
+        }
+    }
+    i = i - 1
+}
+
+# ---- Faza 2: Wyciąganie kolejnych maksimów z kopca ----
+i = n - 1
+dopóki (i > 0) {
+    # Zamień korzeń (maksimum) z ostatnim elementem aktywnej części
+    zmienna liczba tmp = dane[0]
+    dane[0] = dane[i]
+    dane[i] = tmp
+
+    # Przywróć własność kopca dla zmniejszonego zakresu [0..i-1]
+    zmienna liczba pos = 0
+    zmienna liczba hs  = i
+    zmienna logiczny gotowy = fałsz
+    dopóki (nie gotowy) {
+        zmienna liczba lewe      = 2 * pos + 1
+        zmienna liczba prawe     = 2 * pos + 2
+        zmienna liczba najwiekszy = pos
+        jeśli (lewe < hs oraz dane[lewe] > dane[najwiekszy]) {
+            najwiekszy = lewe
+        }
+        jeśli (prawe < hs oraz dane[prawe] > dane[najwiekszy]) {
+            najwiekszy = prawe
+        }
+        jeśli (najwiekszy != pos) {
+            zmienna liczba tmp2 = dane[pos]
+            dane[pos] = dane[najwiekszy]
+            dane[najwiekszy] = tmp2
+            pos = najwiekszy
+        }
+        inaczej {
+            gotowy = prawda
+        }
+    }
+    i = i - 1
+}
+
+pisz("Po sortowaniu  (Heap Sort):   ")
+dla x w dane {
+    pisz(x)
+    pisz(" ")
+}
+piszln("")

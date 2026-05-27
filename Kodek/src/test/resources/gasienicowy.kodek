@@ -1,0 +1,105 @@
+# Algorytm gąsienicowy (Sliding Window / Two Pointers)
+# Szuka ciągłej podtablicy liczb nieujemnych o zadanej sumie
+# Złożoność: O(n)
+
+zmienna lista dane = [1, 4, 2, 6, 3, 8, 2, 5, 1, 3]
+zmienna liczba n   = rozmiar(dane)
+zmienna liczba cel = 11
+
+pisz("Tablica: ")
+dla x w dane {
+    pisz(x)
+    pisz(" ")
+}
+piszln("")
+pisz("Szukana suma: ")
+piszln(cel)
+
+zmienna liczba lewy  = 0
+zmienna liczba prawy = 0
+zmienna liczba suma  = dane[0]
+zmienna logiczny znaleziono = fałsz
+
+dopóki (prawy < n) {
+    jeśli (suma == cel) {
+        # Znaleziono – wypisz indeksy i elementy
+        pisz("Podtablica [")
+        pisz(lewy)
+        pisz("..")
+        pisz(prawy)
+        piszln("]:")
+        dla k od lewy do prawy {
+            pisz(dane[k])
+            pisz(" ")
+        }
+        piszln("")
+        znaleziono = prawda
+        przerwij
+    }
+    inaczej jeśli (suma < cel) {
+        # Rozszerz okno w prawo
+        prawy = prawy + 1
+        jeśli (prawy < n) {
+            suma = suma + dane[prawy]
+        }
+    }
+    inaczej {
+        # Zmniejsz okno od lewej
+        jeśli (lewy < prawy) {
+            suma = suma - dane[lewy]
+            lewy = lewy + 1
+        }
+        inaczej {
+            # Okno jednoelementowe przekracza cel – przesuń całe okno
+            prawy = prawy + 1
+            jeśli (prawy < n) {
+                suma = dane[prawy]
+                lewy = prawy
+            }
+        }
+    }
+}
+
+jeśli (nie znaleziono) {
+    piszln("Brak podtablicy o podanej sumie.")
+}
+
+# Drugi test – suma, której nie ma
+piszln("")
+cel = 100
+pisz("Szukana suma: ")
+piszln(cel)
+lewy  = 0
+prawy = 0
+suma  = dane[0]
+znaleziono = fałsz
+
+dopóki (prawy < n) {
+    jeśli (suma == cel) {
+        znaleziono = prawda
+        przerwij
+    }
+    inaczej jeśli (suma < cel) {
+        prawy = prawy + 1
+        jeśli (prawy < n) {
+            suma = suma + dane[prawy]
+        }
+    }
+    inaczej {
+        jeśli (lewy < prawy) {
+            suma = suma - dane[lewy]
+            lewy = lewy + 1
+        }
+        inaczej {
+            prawy = prawy + 1
+            jeśli (prawy < n) {
+                suma = dane[prawy]
+                lewy = prawy
+            }
+        }
+    }
+}
+
+jeśli (nie znaleziono) {
+    piszln("Brak podtablicy o podanej sumie.")
+}

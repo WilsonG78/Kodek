@@ -1,0 +1,75 @@
+# Algorytm Kruskala – minimalne drzewo rozpinające (MST)
+# Graf nieskierowany ważony, 5 węzłów (0-4), 8 krawędzi
+# Krawędzie wstępnie posortowane rosnąco według wagi
+# Struktura Union-Find z łączeniem według rangi
+
+zmienna liczba N = 5   # liczba węzłów
+
+# Krawędzie posortowane wg wagi: (z, cel, waga)
+zmienna lista kraw_z    = [0, 1, 1, 0, 2, 1, 3, 3]
+zmienna lista kraw_cel  = [1, 2, 4, 3, 4, 3, 4, 4]
+zmienna lista kraw_waga = [2, 3, 5, 6, 7, 8, 9, 9]
+zmienna liczba M = rozmiar(kraw_z)
+
+# Union-Find: rodzic[i] = i (każdy węzeł jest własnym korzeniem)
+zmienna lista rodzic
+zmienna lista rang
+dla i od 0 do N - 1 {
+    dodaj(rodzic, i)
+    dodaj(rang,   0)
+}
+
+piszln("Algorytm Kruskala – krawedzie MST:")
+
+zmienna liczba krawedzi_mst = 0
+zmienna liczba e = 0
+zmienna liczba suma_mst = 0
+
+dopóki (e < M oraz krawedzi_mst < N - 1) {
+    zmienna liczba zrodlo = kraw_z[e]
+    zmienna liczba ujscie = kraw_cel[e]
+    zmienna liczba waga   = kraw_waga[e]
+    e = e + 1
+
+    # Find: korzeń zrodlo (iteracyjny – bez kompresji ścieżki)
+    zmienna liczba r1 = zrodlo
+    dopóki (rodzic[r1] != r1) {
+        r1 = rodzic[r1]
+    }
+
+    # Find: korzeń ujscie
+    zmienna liczba r2 = ujscie
+    dopóki (rodzic[r2] != r2) {
+        r2 = rodzic[r2]
+    }
+
+    # Jeśli korzenie różne – brak cyklu, dodaj krawędź do MST
+    jeśli (r1 != r2) {
+        pisz(zrodlo)
+        pisz(" -- ")
+        pisz(ujscie)
+        pisz("  waga: ")
+        piszln(waga)
+        suma_mst = suma_mst + waga
+        krawedzi_mst = krawedzi_mst + 1
+
+        # Union by rank
+        jeśli (rang[r1] < rang[r2]) {
+            rodzic[r1] = r2
+        }
+        inaczej jeśli (rang[r1] > rang[r2]) {
+            rodzic[r2] = r1
+        }
+        inaczej {
+            rodzic[r2] = r1
+            rang[r1]   = rang[r1] + 1
+        }
+    }
+}
+
+pisz("Laczna waga MST: ")
+piszln(suma_mst)
+
+jeśli (krawedzi_mst < N - 1) {
+    piszln("UWAGA: Graf nie jest spójny – MST nie istnieje!")
+}
