@@ -210,10 +210,6 @@ ReturnStmt       = "zwróć" Expression
 ReadStmt         = "czytaj" "(" Identifier ")"
 WriteStmt        = ( "pisz" | "piszln" ) "(" Expression ")"
 
-(* File Operations *)
-FileStmt         = "otwórz" "(" Expression "," Identifier ")"
-                 | "zamknij" "(" Identifier ")"
-
 (* List/Array Access *)
 ListAccess       = Identifier "[" Expression "]"
 ```

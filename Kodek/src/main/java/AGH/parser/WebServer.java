@@ -75,7 +75,11 @@ public class WebServer {
             sendJson(ex, 400, jsonObject("error", "Kod jest za długi (max 64 KB)."));
             return;
         }
-        String kodekCode = new String(rawBody, StandardCharsets.UTF_8);
+        String body = new String(rawBody, StandardCharsets.UTF_8);
+
+        // Wyciągnij kod i stdin z JSON {"code":..., "stdin":...}
+        String kodekCode = parseJsonField(body, "code");
+        String stdinData = parseJsonField(body, "stdin");
 
         // UUID dla tej sesji – zapobiega kolizji plików przy równoczesnych żądaniach
         String uid = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
@@ -102,8 +106,8 @@ public class WebServer {
                 public void syntaxError(Recognizer<?, ?> r, Object sym, int line, int col,
                                         String msg, RecognitionException e) {
                     parseErrors.append("Błąd składni linia ").append(line)
-                               .append(", kolumna ").append(col)
-                               .append(": ").append(msg).append("\n");
+                            .append(", kolumna ").append(col)
+                            .append(": ").append(msg).append("\n");
                 }
             });
 
@@ -143,6 +147,11 @@ public class WebServer {
             Process run = new ProcessBuilder(binary.toString())
                     .redirectErrorStream(true)
                     .start();
+
+            // Przekaż dane wejściowe do stdin procesu
+            try (OutputStream processStdin = run.getOutputStream()) {
+                processStdin.write(stdinData.getBytes(StandardCharsets.UTF_8));
+            }
 
             boolean runFinished = run.waitFor(RUN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             if (!runFinished) {
@@ -209,6 +218,32 @@ public class WebServer {
         return sb.toString();
     }
 
+    /** Wyciąga wartość pola z prostego JSON {"key":"value",...} */
+    private static String parseJsonField(String json, String key) {
+        String search = "\"" + key + "\":\"";
+        int start = json.indexOf(search);
+        if (start < 0) return "";
+        start += search.length();
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '\\' && i + 1 < json.length()) {
+                char next = json.charAt(++i);
+                switch (next) {
+                    case 'n':  sb.append('\n'); break;
+                    case 'r':  sb.append('\r'); break;
+                    case 't':  sb.append('\t'); break;
+                    default:   sb.append(next); break;
+                }
+            } else if (c == '"') {
+                break;
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
     private static void silentDelete(Path p) {
         try { Files.deleteIfExists(p); } catch (Exception ignored) {}
     }
@@ -262,6 +297,7 @@ public class WebServer {
     .examples summary { cursor: pointer; font-weight: 600; color: #2980b9; }
     .examples pre { background: #ecf0f1; color: #2c3e50; cursor: pointer; }
     .examples pre:hover { background: #d5e8f5; }
+    #stdin { height: 80px; border-color: #e67e22; }
   </style>
 </head>
 <body>
@@ -270,6 +306,9 @@ public class WebServer {
 
   <div class="label">✏️ Napisz swój program:</div>
   <textarea id="code" placeholder="zmienna liczba x = 5&#10;piszln(x)"></textarea>
+
+  <div class="label">⌨️ Dane wejściowe (dla czytaj):</div>
+  <textarea id="stdin" placeholder="wpisz dane wejściowe, każda wartość w nowej linii..."></textarea>
 
   <div class="toolbar">
     <button class="btn-run" onclick="runCode()">
@@ -328,8 +367,8 @@ piszln(rozmiar(oceny))</pre>
       try {
         const resp = await fetch('/run', {
           method: 'POST',
-          body: code,
-          headers: { 'Content-Type': 'text/plain; charset=UTF-8' }
+          body: JSON.stringify({ code: code, stdin: document.getElementById('stdin').value }),
+          headers: { 'Content-Type': 'application/json; charset=UTF-8' }
         });
         const data = await resp.json();
         setOutput(data.output || data.error || '(brak wyniku)');
