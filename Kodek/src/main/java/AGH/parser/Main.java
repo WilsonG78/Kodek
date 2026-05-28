@@ -4,6 +4,7 @@ import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.tree.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -27,7 +28,13 @@ import java.util.List;
 public class Main {
 
     public static void main(String[] args) throws Exception {
-        String sourceFile = args.length > 0 ? args[0] : "test.kodek";
+        List<String> argList = Arrays.asList(args);
+        boolean debug = argList.contains("--debug");
+        // Pierwszy argument niebędący flagą to plik źródłowy
+        String sourceFile = argList.stream()
+                .filter(a -> !a.startsWith("--"))
+                .findFirst()
+                .orElse("test.kodek");
 
         // =================================================================
         // Faza 1: Leksowanie
@@ -49,14 +56,16 @@ public class Main {
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         tokens.fill();
 
-        printBanner("Lista tokenów");
-        List<Token> tokenList = tokens.getTokens();
-        for (Token t : tokenList) {
-            if (t.getType() == Token.EOF) break;
-            String name = KodekParser.VOCABULARY.getDisplayName(t.getType());
-            String text = t.getText()
-                    .replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r");
-            System.out.printf("  %-20s '%s'  (linia %d)%n", name, text, t.getLine());
+        if (debug) {
+            printBanner("Lista tokenów");
+            List<Token> tokenList = tokens.getTokens();
+            for (Token t : tokenList) {
+                if (t.getType() == Token.EOF) break;
+                String tName = KodekParser.VOCABULARY.getDisplayName(t.getType());
+                String tText = t.getText()
+                        .replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r");
+                System.out.printf("  %-20s '%s'  (linia %d)%n", tName, tText, t.getLine());
+            }
         }
 
         if (lexErrors[0] > 0) {
@@ -67,9 +76,6 @@ public class Main {
         // =================================================================
         // Faza 2: Parsowanie
         // =================================================================
-        System.out.println();
-        printBanner("Drzewo parsowania");
-
         tokens.seek(0);
         KodekParser parser = new KodekParser(tokens);
         parser.removeErrorListeners();
@@ -85,14 +91,16 @@ public class Main {
         });
 
         ParseTree tree = parser.program();
-        System.out.println(prettyTree(tree, parser, 0));
+
+        if (debug) {
+            printBanner("Drzewo parsowania");
+            System.out.println(prettyTree(tree, parser, 0));
+        }
 
         if (parseErrors[0] > 0) {
             System.err.printf("Znaleziono %d błąd(ów) składniowych. Przerywam.%n", parseErrors[0]);
             System.exit(1);
         }
-
-        System.out.println("Parsowanie zakończone pomyślnie.");
 
         // =================================================================
         // Faza 3: Generowanie kodu C

@@ -1,52 +1,60 @@
 # Przeszukiwanie grafu w głąb (DFS – Depth First Search)
-# Graf skierowany, 6 węzłów (0-5)
+# Graf nieskierowany, 6 węzłów (0-5)
 # Reprezentacja: macierz sąsiedztwa jako płaska lista (6×6)
-# Krawędzie: 0→1, 0→2, 1→3, 1→4, 2→4, 3→5, 4→5
+# Krawędzie: 0-1, 0-2, 1-3, 1-4, 2-4, 3-5, 4-5
 # Wersja iteracyjna ze stosem
+#
+# Stos: lista + wskaźnik top.
+# Push: nadpisz slot jeśli top < rozmiar(stosu), inaczej dodaj na koniec.
 
 zmienna liczba N = 6
 
-# Macierz sąsiedztwa (wiersz i, kolumna j) = 1 jeśli istnieje krawędź i→j
+# Macierz sąsiedztwa (symetryczna):
 #       0  1  2  3  4  5
 # 0: [  0, 1, 1, 0, 0, 0 ]
-# 1: [  0, 0, 0, 1, 1, 0 ]
-# 2: [  0, 0, 0, 0, 1, 0 ]
-# 3: [  0, 0, 0, 0, 0, 1 ]
-# 4: [  0, 0, 0, 0, 0, 1 ]
-# 5: [  0, 0, 0, 0, 0, 0 ]
-zmienna lista macierz = [0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+# 1: [  1, 0, 0, 1, 1, 0 ]
+# 2: [  1, 0, 0, 0, 1, 0 ]
+# 3: [  0, 1, 0, 0, 0, 1 ]
+# 4: [  0, 1, 1, 0, 0, 1 ]
+# 5: [  0, 0, 0, 1, 1, 0 ]
+zmienna lista macierz = [0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0]
 
-# Tablica odwiedzonych węzłów (0 = nieodwiedzony, 1 = odwiedzony)
+# Tablica odwiedzonych węzłów
 zmienna lista odwiedzone
 dla i od 0 do N - 1 {
     dodaj(odwiedzone, 0)
 }
 
-# Stos iteracyjny DFS (symulowany listą + wskaźnikiem top)
+# Stos DFS (lista + wskaźnik top)
 zmienna lista stos
 zmienna liczba top = 0
-dodaj(stos, 0)    # Startujemy od węzła 0
+dodaj(stos, 0)   # startujemy od węzła 0
 
-piszln("DFS od węzła 0:")
+pisz("DFS od węzła 0: ")
 
 dopóki (top >= 0) {
     # Zdejmij węzeł ze stosu
     zmienna liczba wezel = stos[top]
     top = top - 1
 
-    # Przetwarzaj tylko nieodwiedzone węzły
     jeśli (odwiedzone[wezel] == 0) {
         odwiedzone[wezel] = 1
         pisz(wezel)
         pisz(" ")
 
-        # Wrzuć na stos nieodwiedzonych sąsiadów (od N-1 do 0, by odwiedzać w kolejności rosnącej)
+        # Wrzuć nieodwiedzonych sąsiadów na stos (od N-1 do 0,
+        # by w następnym popsie wychodzić w kolejności rosnącej)
         zmienna liczba j = N - 1
         dopóki (j >= 0) {
             zmienna liczba idx = wezel * N + j
             jeśli (macierz[idx] == 1 oraz odwiedzone[j] == 0) {
                 top = top + 1
-                dodaj(stos, j)
+                jeśli (top < rozmiar(stos)) {
+                    stos[top] = j
+                }
+                inaczej {
+                    dodaj(stos, j)
+                }
             }
             j = j - 1
         }
@@ -55,7 +63,7 @@ dopóki (top >= 0) {
 
 piszln("")
 
-# Sprawdź, czy graf jest spójny (czy zostały nieodwiedzone węzły)
+# Sprawdź spójność
 zmienna liczba nieodwiedzone = 0
 dla i od 0 do N - 1 {
     jeśli (odwiedzone[i] == 0) {

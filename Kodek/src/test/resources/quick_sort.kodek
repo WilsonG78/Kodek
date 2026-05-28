@@ -1,6 +1,12 @@
 # Algorytm sortowania szybkiego (Quick Sort)
 # Wersja iteracyjna z symulowanym stosem rekursji
 # Pivot = ostatni element podtablicy (schemat Lomuto)
+#
+# Stos: lista + wskaźnik top.
+# Push: jeśli top < rozmiar(stosu) – nadpisz slot (odczytany wcześniej),
+#        inaczej – dodaj nowy element na koniec.
+# To rozwiązuje problem gdzie dodaj() zawsze dodaje na KONIEC,
+# a top po popsie wskazuje na już zużyty slot.
 
 zmienna lista dane = [10, 7, 8, 9, 1, 5, 3, 6]
 zmienna liczba n = rozmiar(dane)
@@ -12,11 +18,11 @@ dla x w dane {
 }
 piszln("")
 
-# Stosy symulujące rekursję (granice lewego i prawego krańca)
 zmienna lista stos_lewy
 zmienna lista stos_prawy
 zmienna liczba top = 0
 
+# Inicjalne pchnięcie całej tablicy
 dodaj(stos_lewy,  0)
 dodaj(stos_prawy, n - 1)
 
@@ -42,7 +48,6 @@ dopóki (top >= 0) {
             j = j + 1
         }
 
-        # Wstaw pivot na właściwą pozycję
         zmienna liczba tmp2 = dane[i + 1]
         dane[i + 1] = dane[prawy]
         dane[prawy] = tmp2
@@ -52,14 +57,27 @@ dopóki (top >= 0) {
         # Wrzuć lewą połowę na stos
         jeśli (lewy < pi) {
             top = top + 1
-            dodaj(stos_lewy,  lewy)
-            dodaj(stos_prawy, pi - 1)
+            jeśli (top < rozmiar(stos_lewy)) {
+                stos_lewy[top]  = lewy
+                stos_prawy[top] = pi - 1
+            }
+            inaczej {
+                dodaj(stos_lewy,  lewy)
+                dodaj(stos_prawy, pi - 1)
+            }
         }
+
         # Wrzuć prawą połowę na stos
         jeśli (pi < prawy) {
             top = top + 1
-            dodaj(stos_lewy,  pi + 1)
-            dodaj(stos_prawy, prawy)
+            jeśli (top < rozmiar(stos_lewy)) {
+                stos_lewy[top]  = pi + 1
+                stos_prawy[top] = prawy
+            }
+            inaczej {
+                dodaj(stos_lewy,  pi + 1)
+                dodaj(stos_prawy, prawy)
+            }
         }
     }
 }

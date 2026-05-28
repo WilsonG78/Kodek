@@ -45,6 +45,24 @@ public class CGenerator extends KodekBaseVisitor<String> {
         return null;
     }
 
+    /**
+     * Zwraca poprawne referencje C do zmiennej listy:
+     *  - lokalna KodekLista  → "&name"
+     *  - parametr KodekLista* ("lista_ptr") → "name"  (już jest wskaźnikiem)
+     */
+    private String listRef(String varName) {
+        return "lista_ptr".equals(lookupVar(varName)) ? varName : "&" + varName;
+    }
+
+    /**
+     * Pobiera listRef gdy znamy tylko ExpressionContext.
+     * Jeśli wyrażenie to proste ID – używa listRef(id), inaczej zakłada lokalną wartość.
+     */
+    private String listRefFromExpr(KodekParser.ExpressionContext expr) {
+        String id = extractSimpleId(expr);
+        return id != null ? listRef(id) : "&" + visit(expr);
+    }
+
     // =========================================================
     //  TYPY ZWRACANE PRZEZ FUNKCJE (KODEK → C)
     // =========================================================
@@ -399,10 +417,10 @@ public class CGenerator extends KodekBaseVisitor<String> {
         String varType = lookupVar(name);
 
         if (ctx.expression().size() == 2) {
-            // lista[i] = val  →  lista_set(&name, i, val)
+            // lista[i] = val  →  lista_set(&name, i, val)  lub  lista_set(name, i, val) gdy ptr
             String index = visit(ctx.expression(0));
             String val   = visit(ctx.expression(1));
-            return "lista_set(&" + name + ", " + index + ", " + val + ")";
+            return "lista_set(" + listRef(name) + ", " + index + ", " + val + ")";
         } else {
             String val = visit(ctx.expression(0));
             // tekst: przypisanie przez strcpy (char[] nie może być przypisane przez =)
@@ -528,8 +546,9 @@ public class CGenerator extends KodekBaseVisitor<String> {
 
     @Override
     public String visitListAccess(KodekParser.ListAccessContext ctx) {
-        // name[i]  →  lista_get(&name, i)
-        return "lista_get(&" + ctx.ID().getText() + ", " + visit(ctx.expression()) + ")";
+        // name[i]  →  lista_get(&name, i)  lub  lista_get(name, i) gdy ptr
+        String varName = ctx.ID().getText();
+        return "lista_get(" + listRef(varName) + ", " + visit(ctx.expression()) + ")";
     }
 
     // =========================================================
@@ -626,17 +645,19 @@ public class CGenerator extends KodekBaseVisitor<String> {
             // === dla ocena w oceny { ... } ===
             // Pobierz nazwę zmiennej listy jeśli wyrażenie jest prostym ID
             String listName = extractSimpleId(ctx.expression(0));
-            String listExpr = (listName != null) ? listName : visit(ctx.expression(0));
+            // Wyznacz poprawną referencję C (&name dla lokalnej, name dla wskaźnika)
+            String listCRef = (listName != null) ? listRef(listName)
+                                                 : "&" + visit(ctx.expression(0));
 
             pushScope();
             declareVar(varName, "liczba");  // typ elementu – uproszczenie: int
 
             sb.append(indent())
-              .append("for (int _i = 0; _i < lista_len(&").append(listExpr).append("); _i++) {\n");
+              .append("for (int _i = 0; _i < lista_len(").append(listCRef).append("); _i++) {\n");
             indentLevel++;
 
             sb.append(indent()).append("int ").append(varName)
-              .append(" = lista_get(&").append(listExpr).append(", _i);\n");
+              .append(" = lista_get(").append(listCRef).append(", _i);\n");
 
             // Odwiedź instrukcje bloku bezpośrednio (zakres iteratora jest już otwarty)
             for (KodekParser.StatementContext stmt : ctx.block().statement()) {
@@ -729,7 +750,9 @@ public class CGenerator extends KodekBaseVisitor<String> {
             if (i > 0) sb.append(", ");
             String type  = ctx.typeName(i).getText();
             String pname = ctx.ID(i).getText();
-            declareVar(pname, type);
+            // lista param jest KodekLista* – zapamiętujemy jako "lista_ptr" by listRef() mogło
+            // pominąć & (inaczej powstawałby KodekLista** przy lista_get/lista_set)
+            declareVar(pname, type.equals("lista") ? "lista_ptr" : type);
             if (type.equals("tekst")) {
                 // tekst przez wskaźnik (char*) – standardowe C
                 sb.append("char* ").append(pname);
@@ -781,16 +804,16 @@ public class CGenerator extends KodekBaseVisitor<String> {
                 return "0";
             case "rozmiar":
                 if (ctx.argumentList() != null) {
-                    String listName = visit(ctx.argumentList().expression(0));
-                    return "lista_len(&" + listName + ")";
+                    String ref = listRefFromExpr(ctx.argumentList().expression(0));
+                    return "lista_len(" + ref + ")";
                 }
                 return "0";
             case "dodaj":
-                // dodaj(lista, element)  →  lista_dodaj(&lista, element)
+                // dodaj(lista, element)  →  lista_dodaj(&lista, element)  lub  lista_dodaj(lista,…) gdy ptr
                 if (ctx.argumentList() != null && ctx.argumentList().expression().size() >= 2) {
-                    String listName = visit(ctx.argumentList().expression(0));
-                    String elem     = visit(ctx.argumentList().expression(1));
-                    return "lista_dodaj(&" + listName + ", " + elem + ")";
+                    String ref  = listRefFromExpr(ctx.argumentList().expression(0));
+                    String elem = visit(ctx.argumentList().expression(1));
+                    return "lista_dodaj(" + ref + ", " + elem + ")";
                 }
                 return "/* dodaj: nieprawidłowe argumenty */";
         }
@@ -808,7 +831,18 @@ public class CGenerator extends KodekBaseVisitor<String> {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < ctx.expression().size(); i++) {
             if (i > 0) sb.append(", ");
-            sb.append(visit(ctx.expression(i)));
+            KodekParser.ExpressionContext expr = ctx.expression(i);
+            String id   = extractSimpleId(expr);
+            String type = (id != null) ? lookupVar(id) : null;
+            if ("lista".equals(type)) {
+                // Lokalna KodekLista → funkcja oczekuje KodekLista*, przekazujemy &id
+                sb.append("&").append(id);
+            } else if ("lista_ptr".equals(type)) {
+                // Parametr KodekLista* → już jest wskaźnikiem, przekazujemy as-is
+                sb.append(id);
+            } else {
+                sb.append(visit(expr));
+            }
         }
         return sb.toString();
     }
