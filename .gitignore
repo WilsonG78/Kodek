@@ -1,29 +1,53 @@
-# ANTLR4 - wygenerowane pliki parsera
-Kodek/src/main/java/AGH/parser/gen/
-parser/*.jar
-Kodek/src/main/java/AGH/parser/*.jar
+# ============================================================
+#  Maven – artefakty budowania
+# ============================================================
+target/
 
-# Maven - artefakty budowania
-Kodek/target/
+# ============================================================
+#  ANTLR4 – wygenerowane pliki parsera (produkowane przez mvn)
+# ============================================================
+**/src/main/java/**/gen/
+**/src/main/java/**/*.jar
 
-# Java - skompilowane klasy
+# ============================================================
+#  Java – skompilowane klasy (na wypadek ręcznej kompilacji)
+# ============================================================
 *.class
 
-# Kompilator C++ i pliki wykonywalne
+# ============================================================
+#  Pliki wyjściowe generatora Kodek → C
+# ============================================================
+output.c
+output
+**/src/test/resources/output
+**/src/test/resources/output.c
+
+# ============================================================
+#  Kompilator C – pliki pośrednie i wykonywalne
+# ============================================================
 *.o
 *.out
-*.exe
 a.out
+*.exe
 
-# Pliki debugowania
+# ============================================================
+#  Pliki debugowania
+# ============================================================
 *.dSYM/
 *.pdb
 
-# IDE
-.vscode/
+# ============================================================
+#  IDE
+# ============================================================
 .idea/
+.vscode/
 *.iml
+*.ipr
+*.iws
 
-# System
+# ============================================================
+#  System operacyjny
+# ============================================================
 .DS_Store
 Thumbs.db
+desktop.ini
