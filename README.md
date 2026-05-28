@@ -1,164 +1,379 @@
-# Kodek - Programming Language for Children
+# Kodek — język programowania dla dzieci
 
-**Kodek** is a modern programming language designed specifically for Polish children to learn fundamental computer science concepts through an intuitive, Polish syntax that compiles to C. This combines readability with the performance of native code.
+## 📌 Dane studentów
 
-## 📌 Authors
-- Filip Latawiec flatawiec@student.agh.edu.pl
-- Bartosz Lech blech@student.agh.edu.pl
-
-## 🎯 Project Goals
-
-Kodek aims to:
-- Introduce children to programming in their native language
-- Teach basic algorithms and data structures
-- Simplify learning through natural Polish grammar
-- Enable written programs to run with the efficiency of C code
-- Foster computational thinking in a child-friendly environment
-
-## ✨ Key Features
-
-- **Polish Syntax** - Instructions written in Polish for easy understanding
-- **Simple Data Structures** - Lists, dictionaries, text, numbers, and booleans
-- **Input/Output** - Reading from keyboard and writing to screen
-- **File Operations** - Writing to and reading from files
-- **Compilation to C** - Fast and efficient program execution
-- **Core Algorithms** - Loops, conditionals, functions, recursion
-- **Child-Friendly Grammar** - Minimal punctuation, logical block scoping using curly braces 
-- **ANTLR** - parser generator
-- **Java** - implementation language
+| Imię i nazwisko | E-mail |
+|-----------------|--------|
+| Filip Latawiec | flatawiec@student.agh.edu.pl |
+| Bartosz Lech | blech@student.agh.edu.pl |
 
 ---
 
-## 📋 Lexical Analysis - Token Specification
+## 📋 Założenia projektu
 
-### 1. Keywords (Reserved Words)
+### Ogólne cele programu
 
-| Polish | English Meaning | Purpose |
-|--------|-----------------|---------|
-| `zmienna` | variable | Declare a variable |
-| `pisz` | write | Output without newline |
-| `piszln` | writeln | Output with newline |
-| `czytaj` | read | Read from keyboard |
-| `jeśli` | if | Conditional statement |
-| `inaczej` | else | Alternative branch |
-| `inaczej jeśli` | else if | Chained conditional |
-| `dla` | for | Loop with counter |
-| `dopóki` | while | Condition-based loop |
-| `funkcja` | function | Define a function |
-| `zwróć` | return | Return value from function |
-| `oraz` | and | Logical AND operator |
-| `lub` | or | Logical OR operator |
-| `nie` | not | Logical NOT operator |
-| `prawda` | true | Boolean true value |
-| `fałsz` | false | Boolean false value |
-| `od` | from | Start of range (for loops) |
-| `do` | to | End of range (for loops) |
-| `w` | in | For-each loop iteration |
-| `przerwij` | break | Exit loop immediately |
-| `kontynuuj` | continue | Skip to next loop iteration |
-| `otwórz` | open | Open file |
-| `zamknij` | close | Close file |
-| `zwraca` | returns | Function return type annotation |
+Kodek to język programowania stworzony z myślą o polskich dzieciach, które stawiają pierwsze kroki w programowaniu. Celem jest umożliwienie nauki podstawowych pojęć informatycznych (zmienne, pętle, warunki, funkcje, struktury danych) w ojczystym języku, z minimalną ilością znaków interpunkcyjnych i intuicyjną składnią.
 
-### 2. Types
+### Rodzaj translatora
 
-| Type | English Meaning | C equivalent | Example |
-|------|-----------------|--------------|---------|
-| `liczba` | integer number | `int` | `zmienna liczba wiek = 10` |
-| `ułamek` | decimal number | `double` | `zmienna ułamek pi = 3.14` |
-| `tekst` | text string | `char*` | `zmienna tekst imie = "Ala"` |
-| `logiczny` | boolean | `int` (0/1) | `zmienna logiczny dorosly = fałsz` |
-| `lista` | list / array | `int[]` etc. | `zmienna lista oceny = [4, 5, 3]` |
+**Kompilator** — program źródłowy zapisany w języku Kodek jest tłumaczony do kodu źródłowego w języku C, który następnie jest kompilowany przez `gcc` do natywnego pliku wykonywalnego. Wynik działania programu Kodek to działający binarny plik `.out` / `output`.
 
-### 3. Operators
+```
+plik .kodek  →  [Kodek kompilator]  →  plik .c  →  [gcc]  →  plik wykonywalny  →  uruchomienie
+```
 
-| Operator | Type | Purpose | Example |
-|----------|------|---------|---------|
-| `=` | Assignment | Assign value to variable | `x = 5` |
-| `+` | Arithmetic | Addition / String concatenation | `a + b` |
-| `-` | Arithmetic | Subtraction | `a - b` |
-| `*` | Arithmetic | Multiplication | `a * b` |
-| `/` | Arithmetic | Division | `a / b` |
-| `%` | Arithmetic | Modulo (remainder) | `a % b` |
-| `^` | Arithmetic | Exponentiation | `a ^ b` |
-| `==` | Comparison | Equal to | `a == b` |
-| `!=` | Comparison | Not equal to | `a != b` |
-| `<` | Comparison | Less than | `a < b` |
-| `>` | Comparison | Greater than | `a > b` |
-| `<=` | Comparison | Less than or equal | `a <= b` |
-| `>=` | Comparison | Greater than or equal | `a >= b` |
-| `oraz` | Logical | AND (keyword) | `x > 0 oraz x < 10` |
-| `lub` | Logical | OR (keyword) | `x < 0 lub x > 10` |
-| `nie` | Logical | NOT (keyword) | `nie (x == 0)` |
+### Planowany wynik działania programu
 
-### 4. Literals
+> **Kompilator języka Kodek do kodu C**
 
-| Type | Format | Examples |
-|------|--------|----------|
-| **Integer Number** | Sequence of digits | `42`, `0`, `9999` |
-| **Float Number** | Digits with decimal point | `3.14`, `2.5`, `0.001` |
-| **Text String** | Double-quoted | `"Hello"`, `"Ala has a cat"` |
-| **Boolean** | `prawda` or `fałsz` | `prawda`, `fałsz` |
-| **List** | Comma-separated values in brackets | `[1, 2, 3]`, `["a", "b"]` |
+Program wejściowy (plik `.kodek`) jest analizowany i przekształcany w poprawny plik `.c`, który następnie jest automatycznie kompilowany i uruchamiany przez narzędzie.
 
-### 5. Separators & Delimiters
+### Język implementacji
 
-| Symbol | Name | Purpose |
-|--------|------|---------|
-| `(` `)` | Parentheses | Group expressions, function parameters |
-| `[` `]` | Brackets | List literals and indexing |
-| `,` | Comma | Separate arguments/list elements |
-| `#` | Hash | Start of comment (extends to end of line) |
-| `{` `}` | Curly Braces | Define block scope (functions, loops, conditionals) |
+**Java 17** — cały kompilator (lekser, parser, generator kodu) jest napisany w Javie. ANTLR4 generuje klasy leksera i parsera na podstawie gramatyki; ręcznie napisany Visitor (`CGenerator.java`) produkuje kod C.
 
-### 6. Built-in Functions
+### Sposób realizacji skanera i parsera
 
-| Function | Parameters | Returns | Purpose |
-|----------|-----------|---------|---------|
-| `pierwiastek` | (number) | number | Square root |
-| `wartość_bezwzględna` | (number) | number | Absolute value |
-| `zaokrąglij` | (number) | number | Round to nearest integer |
-| `losowa_liczba` | (min, max) | number | Random integer in range |
-| `długość` | (text) | number | String length |
-| `góra` | (text) | text | Convert to uppercase |
-| `dół` | (text) | text | Convert to lowercase |
-| `dodaj` | (list, element) | void | Add element to list |
-| `rozmiar` | (list) | number | Get list size |
+Skaner i parser są generowane automatycznie przez **ANTLR4** (Another Tool for Language Recognition, wersja 4.13.2) na podstawie pliku gramatyki `Kodek.g4`. ANTLR4 produkuje:
+- `KodekLexer` — tokenizuje wejście (rozpoznaje słowa kluczowe, liczby, stringi, operatory)
+- `KodekParser` — buduje drzewo parsowania (ParseTree / AST)
+- `KodekBaseVisitor<T>` — interfejs wzorca Visitor do przechodzenia drzewa
+
+Generacja kodu C odbywa się przez klasę `CGenerator extends KodekBaseVisitor<String>`, gdzie każda metoda `visitXxx()` zwraca fragment kodu C. Drzewo jest przechodzane rekurencyjnie metodą `visit()`.
 
 ---
 
-## 🎨 Syntax (Grammar in EBNF)
+## 🛠 Narzędzia i zależności zewnętrzne
 
-### Extended Backus-Naur Form (EBNF) Notation
+| Narzędzie | Wersja | Rola |
+|-----------|--------|------|
+| Java (JDK) | ≥ 17 | Język implementacji kompilatora |
+| Maven | ≥ 3.8 | System budowania projektu |
+| ANTLR4 runtime | 4.13.2 | Biblioteka wykonawcza parsera (zależność Maven) |
+| ANTLR4 Maven Plugin | 4.13.2 | Generuje `KodekLexer`/`KodekParser` z `Kodek.g4` podczas `mvn compile` |
+| gcc | dowolna | Kompiluje wygenerowany plik `.c` do pliku wykonywalnego |
+| libm (`-lm`) | systemowa | Biblioteka matematyczna C (dla `sqrt`, `pow`, `round`) |
+
+Wszystkie zależności Maven są pobierane automatycznie z Maven Central. Jedyną ręcznie instalowaną zależnością zewnętrzną jest `gcc` (dostępny jako pakiet systemowy: `apt install gcc` / `brew install gcc`).
+
+---
+
+## 🚀 Krótka instrukcja obsługi
+
+Wszystkie polecenia wykonywane z katalogu `Kodek/` (korzeń modułu Maven):
+
+```bash
+# 1. Zbuduj projekt (generuje parser ANTLR4, kompiluje Javę)
+cd Kodek && mvn package -DskipTests
+
+# 2. Skompiluj i uruchom plik .kodek
+mvn exec:java@cli -Dexec.args="src/test/resources/test.kodek"
+
+# 3. Skompiluj z podglądem tokenów i drzewa parsowania (tryb debug)
+mvn exec:java@cli -Dexec.args="src/test/resources/test.kodek --debug"
+
+# 4. Uruchom przeglądarkowe środowisko (playground) pod http://localhost:8080
+mvn exec:java@web
+
+# 5. Uruchom wszystkie testy
+mvn test
+
+# 6. Uruchom pojedynczą klasę testową
+mvn test -Dtest=CGeneratorTest
+
+# 7. Uruchom pojedynczą metodę testową
+mvn test -Dtest=CGeneratorTest#testForOdDo
+```
+
+**Potok wykonania CLI:** plik `.kodek` → lekser ANTLR4 → parser ANTLR4 → `CGenerator` (Visitor) → plik `output.c` → `gcc -lm` → `output` (uruchomiony natychmiast).
+
+Pliki `output.c` i `output` są zapisywane obok pliku źródłowego `.kodek` i są wykluczone przez `.gitignore`.
+
+---
+
+## 📖 Opis tokenów
+
+### 1. Słowa kluczowe (zarezerwowane)
+
+| Token Kodek | Znaczenie | Zastosowanie |
+|-------------|-----------|--------------|
+| `zmienna` | variable | Deklaracja zmiennej |
+| `pisz` | write | Wypisanie bez nowej linii |
+| `piszln` | writeln | Wypisanie z nową linią |
+| `czytaj` | read | Odczyt z klawiatury |
+| `jeśli` | if | Instrukcja warunkowa |
+| `inaczej` | else | Gałąź alternatywna |
+| `inaczej jeśli` | else if | Kolejny warunek |
+| `dla` | for | Pętla z licznikiem lub for-each |
+| `dopóki` | while | Pętla warunkowa |
+| `funkcja` | function | Definicja funkcji |
+| `zwróć` | return | Wartość zwracana |
+| `zwraca` | returns | Adnotacja typu zwracanego |
+| `oraz` | and | Logiczne AND |
+| `lub` | or | Logiczne OR |
+| `nie` | not | Logiczne NOT |
+| `prawda` | true | Wartość logiczna prawda |
+| `fałsz` | false | Wartość logiczna fałsz |
+| `od` | from | Początek zakresu pętli `dla` |
+| `do` | to | Koniec zakresu pętli `dla` |
+| `w` | in | Iteracja for-each |
+| `przerwij` | break | Wyjście z pętli |
+| `kontynuuj` | continue | Następna iteracja pętli |
+| `otwórz` | open | Otwarcie pliku |
+| `zamknij` | close | Zamknięcie pliku |
+
+### 2. Typy danych
+
+| Token | Znaczenie | Odpowiednik w C | Przykład |
+|-------|-----------|-----------------|---------|
+| `liczba` | liczba całkowita | `int` | `zmienna liczba wiek = 10` |
+| `ułamek` | liczba zmiennoprzecinkowa | `double` | `zmienna ułamek pi = 3.14` |
+| `tekst` | łańcuch znaków | `char[256]` (lokalnie) / `char*` (parametr) | `zmienna tekst imie = "Ala"` |
+| `logiczny` | wartość logiczna | `int` (0/1) | `zmienna logiczny dorosly = fałsz` |
+| `lista` | dynamiczna lista liczb całkowitych | `KodekLista` (struct) | `zmienna lista oceny = [4, 5, 3]` |
+
+### 3. Operatory
+
+| Operator | Rodzaj | Opis | Przykład |
+|----------|--------|------|---------|
+| `=` | przypisanie | Przypisanie wartości | `x = 5` |
+| `+` | arytmetyczny | Dodawanie | `a + b` |
+| `-` | arytmetyczny | Odejmowanie | `a - b` |
+| `*` | arytmetyczny | Mnożenie | `a * b` |
+| `/` | arytmetyczny | Dzielenie | `a / b` |
+| `%` | arytmetyczny | Reszta z dzielenia | `a % b` |
+| `^` | arytmetyczny | Potęgowanie (→ `pow()`) | `a ^ b` |
+| `==` | porównanie | Równość | `a == b` |
+| `!=` | porównanie | Różność | `a != b` |
+| `<` | porównanie | Mniejszy | `a < b` |
+| `>` | porównanie | Większy | `a > b` |
+| `<=` | porównanie | Mniejszy lub równy | `a <= b` |
+| `>=` | porównanie | Większy lub równy | `a >= b` |
+| `oraz` | logiczny | AND (słowo kluczowe) | `x > 0 oraz x < 10` |
+| `lub` | logiczny | OR (słowo kluczowe) | `x < 0 lub x > 10` |
+| `nie` | logiczny | NOT (słowo kluczowe) | `nie (x == 0)` |
+
+### 4. Literały
+
+| Rodzaj | Format tokenu | Przykłady |
+|--------|--------------|-----------|
+| Liczba całkowita | `DIGIT+` | `42`, `0`, `9999` |
+| Liczba zmiennoprzecinkowa | `DIGIT+ '.' DIGIT+` | `3.14`, `2.5`, `0.001` |
+| Łańcuch znaków | `'"' ~["\r\n]* '"'` | `"Ala"`, `"witaj świecie"` |
+| Wartość logiczna | `prawda` \| `fałsz` | `prawda`, `fałsz` |
+| Lista | `'[' expr (',' expr)* ']'` | `[1, 2, 3]`, `[]` |
+
+### 5. Separatory i ograniczniki
+
+| Symbol | Nazwa | Zastosowanie |
+|--------|-------|--------------|
+| `(` `)` | nawiasy okrągłe | Grupowanie wyrażeń, parametry funkcji |
+| `[` `]` | nawiasy kwadratowe | Literał listy, indeksowanie |
+| `{` `}` | nawiasy klamrowe | Blok instrukcji (funkcje, pętle, warunki) |
+| `,` | przecinek | Separator argumentów / elementów listy |
+| `#` | hash | Komentarz (do końca linii) |
+
+### 6. Funkcje wbudowane
+
+| Funkcja | Parametry | Zwraca | Opis |
+|---------|-----------|--------|------|
+| `pierwiastek` | `(liczba)` | `ułamek` | Pierwiastek kwadratowy (`sqrt`) |
+| `wartość_bezwzględna` | `(liczba)` | `liczba` | Wartość bezwzględna (`abs`) |
+| `zaokrąglij` | `(ułamek)` | `liczba` | Zaokrąglenie do całkowitej (`round`) |
+| `losowa_liczba` | `(min, max)` | `liczba` | Losowa liczba całkowita z zakresu |
+| `długość` | `(tekst)` | `liczba` | Długość łańcucha znaków (`strlen`) |
+| `góra` | `(tekst)` | `tekst` | Zamiana na wielkie litery |
+| `dół` | `(tekst)` | `tekst` | Zamiana na małe litery |
+| `dodaj` | `(lista, elem)` | `void` | Dodanie elementu na koniec listy |
+| `rozmiar` | `(lista)` | `liczba` | Liczba elementów listy |
+
+---
+
+## 📐 Gramatyka języka Kodek
+
+### Gramatyka w notacji ANTLR4 (plik `Kodek.g4`)
+
+```antlr
+grammar Kodek;
+
+program
+    : statement* EOF
+    ;
+
+statement
+    : simpleStmt
+    | blockStmt
+    ;
+
+simpleStmt
+    : varDecl
+    | assignment
+    | functionCall
+    | returnStmt
+    | readStmt
+    | writeStmt
+    | fileStmt
+    | breakStmt
+    | continueStmt
+    ;
+
+blockStmt
+    : ifStmt
+    | forLoop
+    | whileLoop
+    | functionDef
+    ;
+
+typeName
+    : 'liczba'
+    | 'ułamek'
+    | 'tekst'
+    | 'logiczny'
+    | 'lista'
+    ;
+
+varDecl
+    : 'zmienna' typeName ID ('=' expression)?
+    ;
+
+assignment
+    : ID '=' expression
+    | ID '[' expression ']' '=' expression
+    ;
+
+expression : logicalOr ;
+
+logicalOr  : logicalAnd ('lub'  logicalAnd)* ;
+logicalAnd : negation   ('oraz' negation)*   ;
+
+negation
+    : 'nie' negation
+    | comparison
+    ;
+
+comparison : arithmetic (compOp arithmetic)* ;
+strictComparison : arithmetic compOp arithmetic ;
+
+compOp : '==' | '!=' | '<' | '>' | '<=' | '>=' ;
+
+arithmetic : term     (('+' | '-') term)*           ;
+term       : factor   (('*' | '/' | '%') factor)*  ;
+factor     : base     ('^' factor)?                 ;
+
+base
+    : atom
+    | '(' expression ')'
+    ;
+
+atom
+    : NUMBER
+    | STRING
+    | BOOLEAN
+    | listLiteral
+    | functionCall
+    | listAccess
+    | ID
+    ;
+
+listLiteral : '[' (expression (',' expression)*)? ']' ;
+listAccess  : ID '[' expression ']'                   ;
+
+condition
+    : condAnd ('lub' condAnd)*
+    ;
+
+condAnd
+    : condNeg ('oraz' condNeg)*
+    ;
+
+condNeg
+    : 'nie' condNeg
+    | BOOLEAN
+    | ID
+    | '(' condition ')'
+    | strictComparison
+    ;
+
+ifStmt
+    : 'jeśli' '(' condition ')' block
+      ('inaczej' 'jeśli' '(' condition ')' block)*
+      ('inaczej' block)?
+    ;
+
+forLoop
+    : 'dla' ID 'od' expression 'do' expression block
+    | 'dla' ID 'w' expression block
+    ;
+
+whileLoop : 'dopóki' '(' condition ')' block ;
+
+block : '{' statement* '}' ;
+
+breakStmt    : 'przerwij'  ;
+continueStmt : 'kontynuuj' ;
+
+functionDef
+    : 'funkcja' ID '(' paramList? ')' ('zwraca' typeName)? block
+    ;
+
+paramList
+    : typeName ID (',' typeName ID)*
+    ;
+
+functionCall : ID '(' argumentList? ')' ;
+argumentList : expression (',' expression)* ;
+
+returnStmt : 'zwróć' expression ;
+
+readStmt  : 'czytaj' '(' ID ')' ;
+writeStmt : ('pisz' | 'piszln') '(' expression ')' ;
+
+fileStmt
+    : 'otwórz'  '(' expression ',' ID ')'
+    | 'zamknij' '(' ID ')'
+    ;
+
+BOOLEAN : 'prawda' | 'fałsz' ;
+
+ID     : LETTER (LETTER | DIGIT | '_')* ;
+NUMBER : DIGIT+ ('.' DIGIT+)? ;
+STRING : '"' ~["\r\n]* '"' ;
+
+COMMENT : '#' ~[\r\n]* -> skip ;
+NEWLINE : '\r'? '\n'  -> skip ;
+WS      : [ \t]+      -> skip ;
+
+fragment DIGIT  : [0-9] ;
+fragment LETTER
+    : [a-zA-Z]
+    | [Ąą] | [Ćć] | [Ęę] | [Łł] | [Ńń]
+    | [Óó] | [Śś] | [Źź] | [Żż]
+    ;
+```
+
+### Gramatyka w notacji EBNF (poglądowo)
 
 ```ebnf
 Program          = { Statement }
 
-Statement        = ( VarDecl | Assignment | IfStmt | ForLoop | WhileLoop
-                   | FunctionDef | FunctionCall | ReturnStmt
-                   | ReadStmt | WriteStmt | FileStmt
-                   | BreakStmt | ContinueStmt ) NewLine
+Statement        = VarDecl | Assignment | IfStmt | ForLoop | WhileLoop
+                 | FunctionDef | FunctionCall | ReturnStmt
+                 | ReadStmt | WriteStmt | FileStmt
+                 | BreakStmt | ContinueStmt
 
-(* Types *)
 Type             = "liczba" | "ułamek" | "tekst" | "logiczny" | "lista"
 
-(* Variable Declaration and Assignment *)
 VarDecl          = "zmienna" Type Identifier [ "=" Expression ]
 Assignment       = Identifier "=" Expression
-                 | ListAccess "=" Expression
+                 | Identifier "[" Expression "]" "=" Expression
 
-(* Conditions (Logic for If/While) *)
 Condition        = CondAnd { "lub" CondAnd }
 CondAnd          = CondNeg { "oraz" CondNeg }
-CondNeg          = "nie" CondNeg 
-                 | Boolean 
-                 | Identifier 
-                 | "(" Condition ")" 
-                 | StrictComparison
-
+CondNeg          = "nie" CondNeg | Boolean | Identifier
+                 | "(" Condition ")" | StrictComparison
 StrictComparison = Arithmetic CompOp Arithmetic
 
-(* Expressions *)
 Expression       = LogicalOr
 LogicalOr        = LogicalAnd { "lub" LogicalAnd }
 LogicalAnd       = Negation { "oraz" Negation }
@@ -172,99 +387,58 @@ Base             = Atom | "(" Expression ")"
 Atom             = Number | String | Boolean | ListLiteral
                  | FunctionCall | ListAccess | Identifier
 
-(* Literals and Identifiers *)
-Identifier       = Letter { Letter | Digit | "_" }
-Number           = Digit { Digit } [ "." Digit { Digit } ]
-String           = '"' { AnyChar Except('"') } '"'
-Boolean          = "prawda" | "fałsz"
 ListLiteral      = "[" [ Expression { "," Expression } ] "]"
-Digit            = "0" | "1" | ... | "9"
-Letter           = "a".."z" | "A".."Z" | "ą".."ż"
+ListAccess       = Identifier "[" Expression "]"
 
-(* Control Flow *)
 IfStmt           = "jeśli" "(" Condition ")" Block
                    { "inaczej" "jeśli" "(" Condition ")" Block }
                    [ "inaczej" Block ]
-
 ForLoop          = "dla" Identifier "od" Expression "do" Expression Block
                  | "dla" Identifier "w" Expression Block
-
 WhileLoop        = "dopóki" "(" Condition ")" Block
-
 Block            = "{" { Statement } "}"
 
-(* Loop Control *)
 BreakStmt        = "przerwij"
 ContinueStmt     = "kontynuuj"
 
-(* Functions *)
 FunctionDef      = "funkcja" Identifier "(" [ ParamList ] ")" [ "zwraca" Type ] Block
 ParamList        = Type Identifier { "," Type Identifier }
-
 FunctionCall     = Identifier "(" [ ArgumentList ] ")"
 ArgumentList     = Expression { "," Expression }
-
 ReturnStmt       = "zwróć" Expression
 
-(* I/O Operations *)
 ReadStmt         = "czytaj" "(" Identifier ")"
 WriteStmt        = ( "pisz" | "piszln" ) "(" Expression ")"
-
-(* List/Array Access *)
-ListAccess       = Identifier "[" Expression "]"
 ```
 
 ---
 
-### Logic vs. Arithmetic Separation
-```
-In Kodek, we intentionally distinguish between Expressions (used for calculations) and Conditions 
-(used for decision making in jeśli and dopóki).
-Expressions: Focus on math (e.g., 5 + x ^ 2).
-Conditions: Focus on logic. They require Strict Comparison (e.g., x > 0) or boolean values. 
-This prevents confusing bugs and encourages clear, logical thinking.
-```
----
+## 🎨 Przykłady użycia
 
-## 📖 Syntax Examples
-
-### 1. Variables and Assignment
+### 1. Zmienne i przypisanie
 
 ```
-zmienna liczba wiek
-wiek = 42
-
+zmienna liczba wiek = 42
 zmienna tekst imie = "Ala"
-
 zmienna ułamek pi = 3.14
-
 zmienna logiczny dorosly = fałsz
-
 zmienna lista oceny = [4, 5, 3, 2, 5]
 ```
 
-**Compiles to C:**
+Kompiluje się do C:
 ```c
-int wiek;
-wiek = 42;
-
+int wiek = 42;
 char imie[256] = "Ala";
-
 double pi = 3.14;
-
 int dorosly = 0;
-
 KodekLista oceny; lista_init(&oceny);
-lista_dodaj(&oceny, 4);
-lista_dodaj(&oceny, 5);
-lista_dodaj(&oceny, 3);
-lista_dodaj(&oceny, 2);
-lista_dodaj(&oceny, 5);
+lista_dodaj(&oceny, 4); lista_dodaj(&oceny, 5); lista_dodaj(&oceny, 3);
+lista_dodaj(&oceny, 2); lista_dodaj(&oceny, 5);
 ```
 
 ---
 
-### 2. Conditionals
+### 2. Instrukcja warunkowa
 
 ```
 zmienna liczba wiek = 17
@@ -278,50 +452,72 @@ jeśli (wiek >= 18) {
 }
 ```
 
-**Compiles to C:**
+Kompiluje się do C:
 ```c
 int wiek = 17;
-
 if (wiek >= 18) {
-    printf("Dorosly");
+    printf("%s", "Dorosły");
 } else if (wiek >= 13) {
-    printf("Nastolatek");
+    printf("%s", "Nastolatek");
 } else {
-    printf("Dziecko");
+    printf("%s", "Dziecko");
 }
 ```
 
 ---
 
-### 3. For Loop (Fixed Range)
+### 3. Pętla `dla` z zakresem
 
 ```
-dla k od 1 do 10{
+dla k od 1 do 10 {
     pisz(k)
     pisz(" ")
 }
 ```
 
-**Compiles to C:**
+Kompiluje się do C:
 ```c
 for (int k = 1; k <= 10; k++) {
-    printf("%d ", k);
+    printf("%d", k);
+    printf("%s", " ");
 }
 ```
 
 ---
 
-### 4. While Loop (Condition-based)
+### 4. Pętla `dla` — for-each po liście
+
+```
+zmienna lista oceny = [5, 4, 3, 5, 2]
+dla ocena w oceny {
+    piszln(ocena)
+}
+```
+
+Kompiluje się do C:
+```c
+KodekLista oceny; lista_init(&oceny);
+lista_dodaj(&oceny, 5); lista_dodaj(&oceny, 4); lista_dodaj(&oceny, 3);
+lista_dodaj(&oceny, 5); lista_dodaj(&oceny, 2);
+for (int _i = 0; _i < lista_len(&oceny); _i++) {
+    int ocena = lista_get(&oceny, _i);
+    printf("%d\n", ocena);
+}
+```
+
+---
+
+### 5. Pętla `dopóki`
 
 ```
 zmienna liczba x = 0
-dopóki (x < 5){
+dopóki (x < 5) {
     piszln(x)
     x = x + 1
 }
 ```
 
-**Compiles to C:**
+Kompiluje się do C:
 ```c
 int x = 0;
 while (x < 5) {
@@ -332,43 +528,21 @@ while (x < 5) {
 
 ---
 
-### 5. For-Each Loop
+### 6. Przerwij i kontynuuj
 
 ```
-zmienna lista oceny = [5, 4, 3, 5, 2]
-dla ocena w oceny {
-    piszln(ocena)
-}
-``` 
-
-**Compiles to C:**
-```c
-KodekLista oceny; lista_init(&oceny);
-lista_dodaj(&oceny, 5); lista_dodaj(&oceny, 4);
-lista_dodaj(&oceny, 3); lista_dodaj(&oceny, 5); lista_dodaj(&oceny, 2);
-for (int _i = 0; _i < lista_len(&oceny); _i++) {
-    int ocena = lista_get(&oceny, _i);
-    printf("%d\n", ocena);
-}
-```
-
----
-
-### 6. Break and Continue
-
-```
-dla k od 1 do 10{
-    jeśli (k == 5){
+dla k od 1 do 10 {
+    jeśli (k == 5) {
         przerwij
     }
-    jeśli (k % 2 == 0){
+    jeśli (k % 2 == 0) {
         kontynuuj
     }
     piszln(k)
 }
 ```
 
-**Compiles to C:**
+Kompiluje się do C:
 ```c
 for (int k = 1; k <= 10; k++) {
     if (k == 5) { break; }
@@ -379,14 +553,14 @@ for (int k = 1; k <= 10; k++) {
 
 ---
 
-### 7. Functions with Types
+### 7. Funkcje z typami
 
 ```
-funkcja dodaj(liczba a, liczba b) zwraca liczba{
+funkcja dodaj(liczba a, liczba b) zwraca liczba {
     zwróć a + b
 }
 
-funkcja przywitaj(tekst imie){
+funkcja przywitaj(tekst imie) {
     piszln(imie)
 }
 
@@ -394,7 +568,7 @@ zmienna liczba wynik = dodaj(3, 7)
 przywitaj("Ala")
 ```
 
-**Compiles to C:**
+Kompiluje się do C:
 ```c
 int dodaj(int a, int b) {
     return a + b;
@@ -404,99 +578,56 @@ void przywitaj(char* imie) {
     printf("%s\n", imie);
 }
 
-int wynik = dodaj(3, 7);
-przywitaj("Ala");
+int main() {
+    int wynik = dodaj(3, 7);
+    przywitaj("Ala");
+    return 0;
+}
 ```
 
 ---
 
-## 🛠 Developer Guide
-
-### Build & Run Commands
-
-All commands run from the `Kodek/` subdirectory (the Maven module root).
-
-```bash
-# Compile, generate ANTLR sources and run all tests
-cd Kodek && mvn test
-
-# Run a single test class
-mvn test -Dtest=CGeneratorTest
-
-# Run a single test method
-mvn test -Dtest=CGeneratorTest#testForOdDo
-
-# Build JAR without running tests
-mvn package -DskipTests
-
-# Run CLI compiler on a .kodek file
-mvn exec:java@cli -Dexec.args="src/test/resources/test.kodek"
-
-# Run CLI with verbose debug output (token list + parse tree)
-mvn exec:java@cli -Dexec.args="src/test/resources/test.kodek --debug"
-
-# Start the web playground on http://localhost:8080
-mvn exec:java@web
-```
-
-The CLI pipeline: **lex → parse → generate C → `gcc -lm` → run**. The files `output.c` and `output` are written next to the source `.kodek` file and are excluded by `.gitignore`.
-
----
-
-### Architecture
+## 🏗 Architektura projektu
 
 ```
-.kodek source
+plik .kodek
     │
     ▼
-KodekLexer / KodekParser   ← generated by ANTLR4 from Kodek.g4
+KodekLexer / KodekParser     ← generowane przez ANTLR4 z Kodek.g4
     │
-    ▼ ParseTree (AST)
-CGenerator                 ← hand-written Visitor (KodekBaseVisitor<String>)
+    ▼  ParseTree (AST)
+CGenerator                   ← ręcznie napisany Visitor (KodekBaseVisitor<String>)
     │
-    ▼ String (C source code)
-gcc -lm                    ← spawned as subprocess
+    ▼  String (kod C)
+gcc -lm                      ← uruchamiany jako podproces
     │
-    ▼ native binary → executed immediately
+    ▼  natywny plik wykonywalny → uruchomiony natychmiast
 ```
 
-| File | Role |
+| Plik | Rola |
 |------|------|
-| `Kodek/src/main/antlr4/AGH/parser/Kodek.g4` | Grammar — single source of truth for the language |
-| `Kodek/src/main/java/AGH/parser/CGenerator.java` | ANTLR Visitor that walks the AST and emits C code |
-| `Kodek/src/main/java/AGH/parser/Main.java` | CLI entry point |
-| `Kodek/src/main/java/AGH/parser/WebServer.java` | HTTP playground (`GET /` → editor, `POST /run` → JSON) |
-| `Kodek/src/test/java/AGH/parser/CGeneratorTest.java` | Unit tests — assert generated C fragments |
-| `Kodek/src/test/resources/*.kodek` | Example programs in the Kodek language |
+| `Kodek/src/main/antlr4/AGH/parser/Kodek.g4` | Gramatyka — jedyne źródło prawdy o składni języka |
+| `Kodek/src/main/java/AGH/parser/CGenerator.java` | Visitor ANTLR4 — przechodzi AST i emituje kod C |
+| `Kodek/src/main/java/AGH/parser/Main.java` | Punkt wejścia CLI |
+| `Kodek/src/main/java/AGH/parser/WebServer.java` | Serwer HTTP — playground w przeglądarce (`POST /run` → JSON) |
+| `Kodek/src/test/java/AGH/parser/CGeneratorTest.java` | Testy jednostkowe — asercje na fragmentach kodu C |
+| `Kodek/src/test/resources/*.kodek` | Przykładowe programy w języku Kodek |
 
-ANTLR4-generated sources (`KodekLexer`, `KodekParser`, visitors, listeners) land in `target/generated-sources/antlr4/` and are **not** committed.
+Pliki generowane przez ANTLR4 (`KodekLexer`, `KodekParser`, Visitor, Listener) trafiają do `target/generated-sources/antlr4/` i **nie są** commitowane.
 
----
+### Wewnętrzna architektura CGenerator
 
-### CGenerator internals
+- **Generacja trójfazowa:** faza 0 skanuje typy zwracane funkcji; faza 1 emituje definicje funkcji przed `main()`; faza 2 emituje instrukcje najwyższego poziomu wewnątrz `main()`.
+- **Stos zakresów** (`Deque<Map<String,String>>`): mapuje nazwy zmiennych → typy Kodek. Używany do inferencji typów w specyfikatorach formatu `printf`/`scanf`.
+- **Śledzenie parametrów `lista`:** lokalne zmienne `lista` mają typ `"lista"` (C: `KodekLista`), a parametry funkcji typu `lista` — typ `"lista_ptr"` (C: `KodekLista*`). Helper `listRef(name)` zwraca `"&name"` dla lokalnych i `"name"` dla wskaźnikowych.
+- **Środowisko uruchomieniowe `KodekLista`:** struct (`int* data; int len; int cap`) ze strategią podwajania pojemności, wstawiany do każdego wygenerowanego pliku C.
 
-- **Three-phase generation:** phase 0 scans all function return types; phase 1 emits function definitions before `main()`; phase 2 emits top-level statements inside `main()`.
-- **Scope stack** (`Deque<Map<String,String>>`): maps variable names → Kodek type strings. Used for type inference in `pisz`/`piszln` format specifiers and `scanf` format selection.
-- **`lista` parameter tracking:** local `lista` variables are stored as type `"lista"` (C: `KodekLista`), while function parameters of type `lista` are stored as `"lista_ptr"` (C: `KodekLista*`). The helper `listRef(name)` returns `"&name"` for locals and `"name"` for pointer params — this prevents the double-pointer `KodekLista**` bug.
-- **`KodekLista` runtime:** a struct (`int* data; int len; int cap`) with helper functions inlined into every generated file. Currently supports only `int` elements.
-- **Type mapping:** `liczba`→`int`, `ułamek`→`double`, `tekst`→`char[256]` (locals) / `char*` (params), `logiczny`→`int`, `lista`→`KodekLista`.
+### Ograniczenia języka
 
----
-
-### Condition vs. Expression grammar split
-
-Kodek uses two separate hierarchies intentionally:
-
-- **`condition`** (used in `jeśli`/`dopóki`): requires strict comparisons — prevents `jeśli (x)` instead of `jeśli (x > 0)`.
-- **`expression`** (used everywhere else): full arithmetic + logical operators.
-
----
-
-### Language constraints to keep in mind
-
-| Constraint | Workaround |
-|------------|-----------|
-| No negative number literals (grammar: `NUMBER = DIGIT+`) | Write `0 - 1` instead of `-1` |
-| Keywords cannot be used as variable names | See keyword table in section 1 above |
-| `lista` holds only `int` values | — |
-| `for` loop only increments (no decrement syntax) | Use `dopóki` with a counter variable |
+| Ograniczenie | Obejście |
+|-------------|----------|
+| Brak ujemnych literałów (gramatyka: `NUMBER = DIGIT+`) | Pisz `0 - 1` zamiast `-1` |
+| Słowa kluczowe nie mogą być nazwami zmiennych | Zob. tabela słów kluczowych |
+| `lista` przechowuje tylko wartości `int` | — |
+| Pętla `dla…od…do` tylko inkrementuje | Użyj `dopóki` z własnym licznikiem |
+| Funkcje nie mogą być zagnieżdżone (ograniczenie C) | Definiuj wszystkie funkcje na poziomie globalnym |
