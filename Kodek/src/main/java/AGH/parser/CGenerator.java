@@ -19,6 +19,12 @@ import java.util.*;
  *  - dodaj(lista, elem) generuje listName[listName_len++] = elem
  *  - dla-w (for-each) używa scoped zmiennej iteratora
  *  - srand() wywoływane raz na początku main()
+ *
+ * Naprawione błędy v3:
+ *  - break/continue dozwolone tylko wewnątrz pętli (loopBlock/loopStatement)
+ *  - dodano visitLoopBlock, visitLoopStatement, visitLoopSimpleStmt,
+ *    visitLoopBlockStmt, visitLoopIfStmt
+ *  - forLoop i whileLoop używają loopBlock zamiast block
  */
 public class CGenerator extends KodekBaseVisitor<String> {
 
@@ -260,32 +266,32 @@ public class CGenerator extends KodekBaseVisitor<String> {
     /** Generuje pomocnicze funkcje C dołączane przed main(). */
     private String generateHelpers() {
         return "/* ===== KodekLista – dynamiczna lista (vector z C++) ===== */\n"
-             + "typedef struct { int* data; int len; int cap; } KodekLista;\n"
-             + "static void lista_init(KodekLista* l) {\n"
-             + "    l->data = NULL; l->len = 0; l->cap = 0;\n"
-             + "}\n"
-             + "static void lista_dodaj(KodekLista* l, int val) {\n"
-             + "    if (l->len >= l->cap) {\n"
-             + "        l->cap = l->cap == 0 ? 8 : l->cap * 2;\n"
-             + "        l->data = (int*)realloc(l->data, l->cap * sizeof(int));\n"
-             + "    }\n"
-             + "    l->data[l->len++] = val;\n"
-             + "}\n"
-             + "static int lista_get(KodekLista* l, int i) { return l->data[i]; }\n"
-             + "static void lista_set(KodekLista* l, int i, int val) { l->data[i] = val; }\n"
-             + "static int lista_len(KodekLista* l) { return l->len; }\n"
-             + "\n"
-             + "/* ===== Funkcje pomocnicze tekstu ===== */\n"
-             + "char* _kodek_gora(const char* s) {\n"
-             + "    static char r[1024]; int i;\n"
-             + "    for (i = 0; s[i] && i < 1023; i++) r[i] = toupper((unsigned char)s[i]);\n"
-             + "    r[i] = '\\0'; return r;\n"
-             + "}\n"
-             + "char* _kodek_dol(const char* s) {\n"
-             + "    static char r[1024]; int i;\n"
-             + "    for (i = 0; s[i] && i < 1023; i++) r[i] = tolower((unsigned char)s[i]);\n"
-             + "    r[i] = '\\0'; return r;\n"
-             + "}\n";
+                + "typedef struct { int* data; int len; int cap; } KodekLista;\n"
+                + "static void lista_init(KodekLista* l) {\n"
+                + "    l->data = NULL; l->len = 0; l->cap = 0;\n"
+                + "}\n"
+                + "static void lista_dodaj(KodekLista* l, int val) {\n"
+                + "    if (l->len >= l->cap) {\n"
+                + "        l->cap = l->cap == 0 ? 8 : l->cap * 2;\n"
+                + "        l->data = (int*)realloc(l->data, l->cap * sizeof(int));\n"
+                + "    }\n"
+                + "    l->data[l->len++] = val;\n"
+                + "}\n"
+                + "static int lista_get(KodekLista* l, int i) { return l->data[i]; }\n"
+                + "static void lista_set(KodekLista* l, int i, int val) { l->data[i] = val; }\n"
+                + "static int lista_len(KodekLista* l) { return l->len; }\n"
+                + "\n"
+                + "/* ===== Funkcje pomocnicze tekstu ===== */\n"
+                + "char* _kodek_gora(const char* s) {\n"
+                + "    static char r[1024]; int i;\n"
+                + "    for (i = 0; s[i] && i < 1023; i++) r[i] = toupper((unsigned char)s[i]);\n"
+                + "    r[i] = '\\0'; return r;\n"
+                + "}\n"
+                + "char* _kodek_dol(const char* s) {\n"
+                + "    static char r[1024]; int i;\n"
+                + "    for (i = 0; s[i] && i < 1023; i++) r[i] = tolower((unsigned char)s[i]);\n"
+                + "    r[i] = '\\0'; return r;\n"
+                + "}\n";
     }
 
     // =========================================================
@@ -329,6 +335,32 @@ public class CGenerator extends KodekBaseVisitor<String> {
     }
 
     // =========================================================
+    //  LOOP STATEMENT (wewnątrz pętli – dozwolone break/continue)
+    // =========================================================
+
+    @Override
+    public String visitLoopStatement(KodekParser.LoopStatementContext ctx) {
+        return visit(ctx.getChild(0));
+    }
+
+    @Override
+    public String visitLoopSimpleStmt(KodekParser.LoopSimpleStmtContext ctx) {
+        String inner = visit(ctx.getChild(0));
+        // Deklaracje listy zwracają gotowy wieloliniowy kod (kończą się \n)
+        if (inner.endsWith("\n")) return inner;
+        return indent() + inner + ";\n";
+    }
+
+    @Override
+    public String visitLoopBlockStmt(KodekParser.LoopBlockStmtContext ctx) {
+        if (ctx.functionDef() != null) {
+            // Zagnieżdżone definicje funkcji są niedozwolone w C
+            return indent() + "/* BŁĄD: definicja funkcji wewnątrz bloku jest niedozwolona w C */\n";
+        }
+        return visit(ctx.getChild(0));
+    }
+
+    // =========================================================
     //  DEKLARACJA ZMIENNEJ
     // =========================================================
 
@@ -352,13 +384,13 @@ public class CGenerator extends KodekBaseVisitor<String> {
             // Generuj gotowy wieloliniowy kod; visitSimpleStmt wykryje \n i nie doda ";"
             StringBuilder sb = new StringBuilder();
             sb.append(indent()).append("KodekLista ").append(name)
-              .append("; lista_init(&").append(name).append(");\n");
+                    .append("; lista_init(&").append(name).append(");\n");
             if (ctx.expression() != null) {
                 KodekParser.ListLiteralContext listLit = extractListLiteral(ctx.expression());
                 if (listLit != null) {
                     for (KodekParser.ExpressionContext elem : listLit.expression()) {
                         sb.append(indent()).append("lista_dodaj(&").append(name)
-                          .append(", ").append(visit(elem)).append(");\n");
+                                .append(", ").append(visit(elem)).append(");\n");
                     }
                 }
             }
@@ -379,10 +411,10 @@ public class CGenerator extends KodekBaseVisitor<String> {
     private KodekParser.ListLiteralContext extractListLiteral(KodekParser.ExpressionContext expr) {
         try {
             KodekParser.AtomContext atom = expr
-                .logicalOr().logicalAnd(0)
-                .negation(0).comparison()
-                .arithmetic(0).term(0)
-                .factor(0).base().atom();
+                    .logicalOr().logicalAnd(0)
+                    .negation(0).comparison()
+                    .arithmetic(0).term(0)
+                    .factor(0).base().atom();
             return (atom != null) ? atom.listLiteral() : null;
         } catch (Exception e) {
             return null;
@@ -395,10 +427,10 @@ public class CGenerator extends KodekBaseVisitor<String> {
     private String extractSimpleId(KodekParser.ExpressionContext expr) {
         try {
             KodekParser.AtomContext atom = expr
-                .logicalOr().logicalAnd(0)
-                .negation(0).comparison()
-                .arithmetic(0).term(0)
-                .factor(0).base().atom();
+                    .logicalOr().logicalAnd(0)
+                    .negation(0).comparison()
+                    .arithmetic(0).term(0)
+                    .factor(0).base().atom();
             if (atom != null && atom.ID() != null
                     && atom.functionCall() == null && atom.listAccess() == null) {
                 return atom.ID().getText();
@@ -591,8 +623,8 @@ public class CGenerator extends KodekBaseVisitor<String> {
     @Override
     public String visitStrictComparison(KodekParser.StrictComparisonContext ctx) {
         return visit(ctx.arithmetic(0))
-             + " " + ctx.compOp().getText() + " "
-             + visit(ctx.arithmetic(1));
+                + " " + ctx.compOp().getText() + " "
+                + visit(ctx.arithmetic(1));
     }
 
     // =========================================================
@@ -605,13 +637,34 @@ public class CGenerator extends KodekBaseVisitor<String> {
         for (int i = 0; i < ctx.condition().size(); i++) {
             String keyword = (i == 0) ? "if" : " else if";
             sb.append(indent()).append(keyword)
-              .append(" (").append(visit(ctx.condition(i))).append(") ");
+                    .append(" (").append(visit(ctx.condition(i))).append(") ");
             sb.append(visitBlock(ctx.block(i)));
         }
         // else – gdy jest więcej bloków niż warunków
         if (ctx.block().size() > ctx.condition().size()) {
             sb.append(indent()).append(" else ");
             sb.append(visitBlock(ctx.block(ctx.block().size() - 1)));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Wariant ifStmt używany wewnątrz pętli – bloki to loopBlock,
+     * więc break/continue wewnątrz są dozwolone.
+     */
+    @Override
+    public String visitLoopIfStmt(KodekParser.LoopIfStmtContext ctx) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < ctx.condition().size(); i++) {
+            String keyword = (i == 0) ? "if" : " else if";
+            sb.append(indent()).append(keyword)
+                    .append(" (").append(visit(ctx.condition(i))).append(") ");
+            sb.append(visitLoopBlock(ctx.loopBlock(i)));
+        }
+        // else – gdy jest więcej bloków niż warunków
+        if (ctx.loopBlock().size() > ctx.condition().size()) {
+            sb.append(indent()).append(" else ");
+            sb.append(visitLoopBlock(ctx.loopBlock(ctx.loopBlock().size() - 1)));
         }
         return sb.toString();
     }
@@ -634,10 +687,10 @@ public class CGenerator extends KodekBaseVisitor<String> {
             declareVar(varName, "liczba");
 
             sb.append(indent())
-              .append("for (int ").append(varName).append(" = ").append(from)
-              .append("; ").append(varName).append(" <= ").append(to)
-              .append("; ").append(varName).append("++) ");
-            sb.append(visitBlock(ctx.block()));
+                    .append("for (int ").append(varName).append(" = ").append(from)
+                    .append("; ").append(varName).append(" <= ").append(to)
+                    .append("; ").append(varName).append("++) ");
+            sb.append(visitLoopBlock(ctx.loopBlock()));
 
             popScope();
 
@@ -647,20 +700,20 @@ public class CGenerator extends KodekBaseVisitor<String> {
             String listName = extractSimpleId(ctx.expression(0));
             // Wyznacz poprawną referencję C (&name dla lokalnej, name dla wskaźnika)
             String listCRef = (listName != null) ? listRef(listName)
-                                                 : "&" + visit(ctx.expression(0));
+                    : "&" + visit(ctx.expression(0));
 
             pushScope();
             declareVar(varName, "liczba");  // typ elementu – uproszczenie: int
 
             sb.append(indent())
-              .append("for (int _i = 0; _i < lista_len(").append(listCRef).append("); _i++) {\n");
+                    .append("for (int _i = 0; _i < lista_len(").append(listCRef).append("); _i++) {\n");
             indentLevel++;
 
             sb.append(indent()).append("int ").append(varName)
-              .append(" = lista_get(").append(listCRef).append(", _i);\n");
+                    .append(" = lista_get(").append(listCRef).append(", _i);\n");
 
             // Odwiedź instrukcje bloku bezpośrednio (zakres iteratora jest już otwarty)
-            for (KodekParser.StatementContext stmt : ctx.block().statement()) {
+            for (KodekParser.LoopStatementContext stmt : ctx.loopBlock().loopStatement()) {
                 sb.append(visit(stmt));
             }
 
@@ -677,13 +730,14 @@ public class CGenerator extends KodekBaseVisitor<String> {
     public String visitWhileLoop(KodekParser.WhileLoopContext ctx) {
         StringBuilder sb = new StringBuilder();
         sb.append(indent())
-          .append("while (").append(visit(ctx.condition())).append(") ");
-        sb.append(visitBlock(ctx.block()));
+                .append("while (").append(visit(ctx.condition())).append(") ");
+        sb.append(visitLoopBlock(ctx.loopBlock()));
         return sb.toString();
     }
 
     // =========================================================
-    //  BLOK  { instrukcje }
+    //  BLOK  { instrukcje }        (poza pętlą – bez break/continue)
+    //  LOOP BLOK  { instrukcje }   (wewnątrz pętli – z break/continue)
     // =========================================================
 
     @Override
@@ -693,6 +747,25 @@ public class CGenerator extends KodekBaseVisitor<String> {
         indentLevel++;
         pushScope();
         for (KodekParser.StatementContext stmt : ctx.statement()) {
+            sb.append(visit(stmt));
+        }
+        popScope();
+        indentLevel--;
+        sb.append(indent()).append("}\n");
+        return sb.toString();
+    }
+
+    /**
+     * Blok wewnątrz pętli – iteruje po loopStatement zamiast statement,
+     * dzięki czemu break/continue są legalną instrukcją w tym kontekście.
+     */
+    @Override
+    public String visitLoopBlock(KodekParser.LoopBlockContext ctx) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\n");
+        indentLevel++;
+        pushScope();
+        for (KodekParser.LoopStatementContext stmt : ctx.loopStatement()) {
             sb.append(visit(stmt));
         }
         popScope();
@@ -896,7 +969,7 @@ public class CGenerator extends KodekBaseVisitor<String> {
     }
 
     // =========================================================
-    //  BREAK / CONTINUE
+    //  BREAK / CONTINUE (dozwolone tylko w loopBlock)
     // =========================================================
 
     @Override

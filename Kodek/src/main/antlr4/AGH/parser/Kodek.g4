@@ -17,8 +17,6 @@ simpleStmt
     | readStmt
     | writeStmt
     | fileStmt
-    | breakStmt
-    | continueStmt
     ;
 
 blockStmt
@@ -28,6 +26,29 @@ blockStmt
     | functionDef
     ;
 
+loopStatement
+    : loopSimpleStmt
+    | loopBlockStmt
+    ;
+
+loopSimpleStmt
+    : varDecl
+    | assignment
+    | functionCall
+    | returnStmt
+    | readStmt
+    | writeStmt
+    | fileStmt
+    | breakStmt
+    | continueStmt
+    ;
+
+loopBlockStmt
+    : loopIfStmt
+    | forLoop
+    | whileLoop
+    | functionDef
+    ;
 
 typeName
     : 'liczba'
@@ -94,10 +115,10 @@ condAnd
 
 condNeg
     : 'nie' condNeg
-    | BOOLEAN               
-    | ID                    
+    | BOOLEAN
+    | ID
     | '(' condition ')'
-    | strictComparison      
+    | strictComparison
     ;
 
 
@@ -107,14 +128,21 @@ ifStmt
       ('inaczej' block)?
     ;
 
-forLoop
-    : 'dla' ID 'od' expression 'do' expression block
-    | 'dla' ID 'w' expression block
+loopIfStmt
+    : 'jeśli' '(' condition ')' loopBlock
+      ('inaczej' 'jeśli' '(' condition ')' loopBlock)*
+      ('inaczej' loopBlock)?
     ;
 
-whileLoop : 'dopóki' '(' condition ')' block ;
+forLoop
+    : 'dla' ID 'od' expression 'do' expression loopBlock
+    | 'dla' ID 'w' expression loopBlock
+    ;
 
-block : '{' statement* '}' ;
+whileLoop : 'dopóki' '(' condition ')' loopBlock ;
+
+block     : '{' statement*     '}' ;
+loopBlock : '{' loopStatement* '}' ;
 
 breakStmt    : 'przerwij'  ;
 continueStmt : 'kontynuuj' ;
@@ -159,13 +187,13 @@ fragment DIGIT  : [0-9] ;
 
 fragment LETTER
     : [a-zA-Z]
-    | [Ąą]   // Ą ą
-    | [Ćć]   // Ć ć
-    | [Ęę]   // Ę ę
-    | [Łł]   // Ł ł
-    | [Ńń]   // Ń ń
-    | [Óó]   // Ó ó
-    | [Śś]   // Ś ś
-    | [Źź]   // Ź ź
-    | [Żż]   // Ż ż
+    | [Ąą]
+    | [Ćć]
+    | [Ęę]
+    | [Łł]
+    | [Ńń]
+    | [Óó]
+    | [Śś]
+    | [Źź]
+    | [Żż]
     ;

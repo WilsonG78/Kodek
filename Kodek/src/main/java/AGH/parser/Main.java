@@ -103,6 +103,19 @@ public class Main {
         }
 
         // =================================================================
+        // Faza 2.5: Analiza semantyczna
+        // =================================================================
+
+        KodekErrorHandler errorHandler = new KodekErrorHandler();
+        errorHandler.check(tree);
+
+        if (errorHandler.hasErrors()) {
+            printBanner("Błędy semantyczne");
+            errorHandler.printErrors(System.err);
+            System.exit(1);
+        }
+
+        // =================================================================
         // Faza 3: Generowanie kodu C
         // =================================================================
         CGenerator generator = new CGenerator();

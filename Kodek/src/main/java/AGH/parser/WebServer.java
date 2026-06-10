@@ -118,6 +118,18 @@ public class WebServer {
                 return;
             }
 
+            // ── Analiza semantyczna ──────────────────────────────────
+            KodekErrorHandler errorHandler = new KodekErrorHandler();
+            errorHandler.check(tree);
+            if (errorHandler.hasErrors()) {
+                StringBuilder semErrors = new StringBuilder();
+                for (KodekErrorHandler.SemanticError e : errorHandler.getErrors()) {
+                    semErrors.append(e.toString()).append("\n");
+                }
+                sendJson(ex, 200, buildResultJson(semErrors.toString(), ""));
+                return;
+            }
+
             // ── Generowanie C ────────────────────────────────────────
             CGenerator gen = new CGenerator();
             cCode = gen.generate(tree);

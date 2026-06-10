@@ -1,12 +1,18 @@
 # Kodek — język programowania dla dzieci
 
-## 📌 Dane studentów
+## Dane studentów
 
-| Imię i nazwisko | E-mail |
-|-----------------|--------|
-| Filip Latawiec | flatawiec@student.agh.edu.pl |
-| Bartosz Lech | blech@student.agh.edu.pl |
+| Imię i nazwisko |
+|-----------------|
+| Filip Latawiec |
+| Bartosz Lech |
 
+## Dane kontaktowe
+
+| E-mail |
+|---------|
+| flatawiec@student.agh.edu.pl |
+| blech@student.agh.edu.pl |
 ---
 
 ## 📋 Założenia projektu
@@ -41,54 +47,6 @@ Skaner i parser są generowane automatycznie przez **ANTLR4** (Another Tool for 
 - `KodekBaseVisitor<T>` — interfejs wzorca Visitor do przechodzenia drzewa
 
 Generacja kodu C odbywa się przez klasę `CGenerator extends KodekBaseVisitor<String>`, gdzie każda metoda `visitXxx()` zwraca fragment kodu C. Drzewo jest przechodzane rekurencyjnie metodą `visit()`.
-
----
-
-## 🛠 Narzędzia i zależności zewnętrzne
-
-| Narzędzie | Wersja | Rola |
-|-----------|--------|------|
-| Java (JDK) | ≥ 17 | Język implementacji kompilatora |
-| Maven | ≥ 3.8 | System budowania projektu |
-| ANTLR4 runtime | 4.13.2 | Biblioteka wykonawcza parsera (zależność Maven) |
-| ANTLR4 Maven Plugin | 4.13.2 | Generuje `KodekLexer`/`KodekParser` z `Kodek.g4` podczas `mvn compile` |
-| gcc | dowolna | Kompiluje wygenerowany plik `.c` do pliku wykonywalnego |
-| libm (`-lm`) | systemowa | Biblioteka matematyczna C (dla `sqrt`, `pow`, `round`) |
-
-Wszystkie zależności Maven są pobierane automatycznie z Maven Central. Jedyną ręcznie instalowaną zależnością zewnętrzną jest `gcc` (dostępny jako pakiet systemowy: `apt install gcc` / `brew install gcc`).
-
----
-
-## 🚀 Krótka instrukcja obsługi
-
-Wszystkie polecenia wykonywane z katalogu `Kodek/` (korzeń modułu Maven):
-
-```bash
-# 1. Zbuduj projekt (generuje parser ANTLR4, kompiluje Javę)
-cd Kodek && mvn package -DskipTests
-
-# 2. Skompiluj i uruchom plik .kodek
-mvn exec:java@cli -Dexec.args="src/test/resources/test.kodek"
-
-# 3. Skompiluj z podglądem tokenów i drzewa parsowania (tryb debug)
-mvn exec:java@cli -Dexec.args="src/test/resources/test.kodek --debug"
-
-# 4. Uruchom przeglądarkowe środowisko (playground) pod http://localhost:8080
-mvn exec:java@web
-
-# 5. Uruchom wszystkie testy
-mvn test
-
-# 6. Uruchom pojedynczą klasę testową
-mvn test -Dtest=CGeneratorTest
-
-# 7. Uruchom pojedynczą metodę testową
-mvn test -Dtest=CGeneratorTest#testForOdDo
-```
-
-**Potok wykonania CLI:** plik `.kodek` → lekser ANTLR4 → parser ANTLR4 → `CGenerator` (Visitor) → plik `output.c` → `gcc -lm` → `output` (uruchomiony natychmiast).
-
-Pliki `output.c` i `output` są zapisywane obok pliku źródłowego `.kodek` i są wykluczone przez `.gitignore`.
 
 ---
 
@@ -190,6 +148,7 @@ Pliki `output.c` i `output` są zapisywane obok pliku źródłowego `.kodek` i s
 
 ---
 
+
 ## 📐 Gramatyka języka Kodek
 
 ### Gramatyka w notacji ANTLR4 (plik `Kodek.g4`)
@@ -214,12 +173,34 @@ simpleStmt
     | readStmt
     | writeStmt
     | fileStmt
-    | breakStmt
-    | continueStmt
     ;
 
 blockStmt
     : ifStmt
+    | forLoop
+    | whileLoop
+    | functionDef
+    ;
+
+loopStatement
+    : loopSimpleStmt
+    | loopBlockStmt
+    ;
+
+loopSimpleStmt
+    : varDecl
+    | assignment
+    | functionCall
+    | returnStmt
+    | readStmt
+    | writeStmt
+    | fileStmt
+    | breakStmt
+    | continueStmt
+    ;
+
+loopBlockStmt
+    : loopIfStmt
     | forLoop
     | whileLoop
     | functionDef
@@ -279,6 +260,7 @@ atom
 listLiteral : '[' (expression (',' expression)*)? ']' ;
 listAccess  : ID '[' expression ']'                   ;
 
+
 condition
     : condAnd ('lub' condAnd)*
     ;
@@ -295,23 +277,32 @@ condNeg
     | strictComparison
     ;
 
+
 ifStmt
     : 'jeśli' '(' condition ')' block
       ('inaczej' 'jeśli' '(' condition ')' block)*
       ('inaczej' block)?
     ;
 
-forLoop
-    : 'dla' ID 'od' expression 'do' expression block
-    | 'dla' ID 'w' expression block
+loopIfStmt
+    : 'jeśli' '(' condition ')' loopBlock
+      ('inaczej' 'jeśli' '(' condition ')' loopBlock)*
+      ('inaczej' loopBlock)?
     ;
 
-whileLoop : 'dopóki' '(' condition ')' block ;
+forLoop
+    : 'dla' ID 'od' expression 'do' expression loopBlock
+    | 'dla' ID 'w' expression loopBlock
+    ;
 
-block : '{' statement* '}' ;
+whileLoop : 'dopóki' '(' condition ')' loopBlock ;
+
+block     : '{' statement*     '}' ;
+loopBlock : '{' loopStatement* '}' ;
 
 breakStmt    : 'przerwij'  ;
 continueStmt : 'kontynuuj' ;
+
 
 functionDef
     : 'funkcja' ID '(' paramList? ')' ('zwraca' typeName)? block
@@ -326,13 +317,16 @@ argumentList : expression (',' expression)* ;
 
 returnStmt : 'zwróć' expression ;
 
+
 readStmt  : 'czytaj' '(' ID ')' ;
 writeStmt : ('pisz' | 'piszln') '(' expression ')' ;
+
 
 fileStmt
     : 'otwórz'  '(' expression ',' ID ')'
     | 'zamknij' '(' ID ')'
     ;
+
 
 BOOLEAN : 'prawda' | 'fałsz' ;
 
@@ -341,14 +335,23 @@ NUMBER : DIGIT+ ('.' DIGIT+)? ;
 STRING : '"' ~["\r\n]* '"' ;
 
 COMMENT : '#' ~[\r\n]* -> skip ;
-NEWLINE : '\r'? '\n'  -> skip ;
-WS      : [ \t]+      -> skip ;
+NEWLINE : '\r'? '\n' -> skip ;
+
+WS : [ \t]+ -> skip ;
 
 fragment DIGIT  : [0-9] ;
+
 fragment LETTER
     : [a-zA-Z]
-    | [Ąą] | [Ćć] | [Ęę] | [Łł] | [Ńń]
-    | [Óó] | [Śś] | [Źź] | [Żż]
+    | [Ąą]
+    | [Ćć]
+    | [Ęę]
+    | [Łł]
+    | [Ńń]
+    | [Óó]
+    | [Śś]
+    | [Źź]
+    | [Żż]
     ;
 ```
 
@@ -360,7 +363,6 @@ Program          = { Statement }
 Statement        = VarDecl | Assignment | IfStmt | ForLoop | WhileLoop
                  | FunctionDef | FunctionCall | ReturnStmt
                  | ReadStmt | WriteStmt | FileStmt
-                 | BreakStmt | ContinueStmt
 
 Type             = "liczba" | "ułamek" | "tekst" | "logiczny" | "lista"
 
@@ -393,10 +395,22 @@ ListAccess       = Identifier "[" Expression "]"
 IfStmt           = "jeśli" "(" Condition ")" Block
                    { "inaczej" "jeśli" "(" Condition ")" Block }
                    [ "inaczej" Block ]
-ForLoop          = "dla" Identifier "od" Expression "do" Expression Block
-                 | "dla" Identifier "w" Expression Block
-WhileLoop        = "dopóki" "(" Condition ")" Block
+
+ForLoop          = "dla" Identifier "od" Expression "do" Expression LoopBlock
+                 | "dla" Identifier "w" Expression LoopBlock
+
+WhileLoop        = "dopóki" "(" Condition ")" LoopBlock
+
 Block            = "{" { Statement } "}"
+
+LoopBlock        = "{" { LoopStatement } "}"
+
+LoopStatement    = Statement | BreakStmt | ContinueStmt | LoopIfStmt
+                 | ForLoop | WhileLoop
+
+LoopIfStmt       = "jeśli" "(" Condition ")" LoopBlock
+                   { "inaczej" "jeśli" "(" Condition ")" LoopBlock }
+                   [ "inaczej" LoopBlock ]
 
 BreakStmt        = "przerwij"
 ContinueStmt     = "kontynuuj"
@@ -410,6 +424,54 @@ ReturnStmt       = "zwróć" Expression
 ReadStmt         = "czytaj" "(" Identifier ")"
 WriteStmt        = ( "pisz" | "piszln" ) "(" Expression ")"
 ```
+
+---
+
+## 🛠 Narzędzia i zależności zewnętrzne
+
+| Narzędzie | Wersja | Rola |
+|-----------|--------|------|
+| Java (JDK) | ≥ 17 | Język implementacji kompilatora |
+| Maven | ≥ 3.8 | System budowania projektu |
+| ANTLR4 runtime | 4.13.2 | Biblioteka wykonawcza parsera (zależność Maven) |
+| ANTLR4 Maven Plugin | 4.13.2 | Generuje `KodekLexer`/`KodekParser` z `Kodek.g4` podczas `mvn compile` |
+| gcc | dowolna | Kompiluje wygenerowany plik `.c` do pliku wykonywalnego |
+| libm (`-lm`) | systemowa | Biblioteka matematyczna C (dla `sqrt`, `pow`, `round`) |
+
+Wszystkie zależności Maven są pobierane automatycznie z Maven Central. Jedyną ręcznie instalowaną zależnością zewnętrzną jest `gcc` (dostępny jako pakiet systemowy: `apt install gcc` / `brew install gcc`).
+
+---
+
+## 🚀 Krótka instrukcja obsługi
+
+Wszystkie polecenia wykonywane z katalogu `Kodek/` (korzeń modułu Maven):
+
+```bash
+# 1. Zbuduj projekt (generuje parser ANTLR4, kompiluje Javę)
+cd Kodek && mvn package -DskipTests
+
+# 2. Skompiluj i uruchom plik .kodek
+mvn exec:java@cli -Dexec.args="src/test/resources/test.kodek"
+
+# 3. Skompiluj z podglądem tokenów i drzewa parsowania (tryb debug)
+mvn exec:java@cli -Dexec.args="src/test/resources/test.kodek --debug"
+
+# 4. Uruchom przeglądarkowe środowisko (playground) pod http://localhost:8080
+mvn exec:java@web
+
+# 5. Uruchom wszystkie testy
+mvn test
+
+# 6. Uruchom pojedynczą klasę testową
+mvn test -Dtest=CGeneratorTest
+
+# 7. Uruchom pojedynczą metodę testową
+mvn test -Dtest=CGeneratorTest#testForOdDo
+```
+
+**Potok wykonania CLI:** plik `.kodek` → lekser ANTLR4 → parser ANTLR4 → `CGenerator` (Visitor) → plik `output.c` → `gcc -lm` → `output` (uruchomiony natychmiast).
+
+Pliki `output.c` i `output` są zapisywane obok pliku źródłowego `.kodek` i są wykluczone przez `.gitignore`.
 
 ---
 
