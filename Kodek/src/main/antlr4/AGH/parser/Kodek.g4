@@ -51,11 +51,15 @@ loopBlockStmt
     ;
 
 typeName
+    : scalarType
+    | 'lista' scalarType?     // 'lista' (= lista liczb) lub 'lista <typ>' np. 'lista tekst'
+    ;
+
+scalarType
     : 'liczba'
     | 'ułamek'
     | 'tekst'
     | 'logiczny'
-    | 'lista'
     ;
 
 varDecl

@@ -116,6 +116,74 @@ class CGeneratorTest {
         assertContains(code, "lista_init(&buf)");
     }
 
+    @Test
+    @DisplayName("lista tekst → KodekLista_t + lista_t_dodaj (strdup)")
+    void testVarDeclListaTekst() {
+        String code = generate("zmienna lista tekst imiona = [\"Ala\", \"Ola\"]");
+        assertContains(code, "KodekLista_t imiona");
+        assertContains(code, "lista_t_init(&imiona)");
+        assertContains(code, "lista_t_dodaj(&imiona, \"Ala\")");
+        assertContains(code, "lista_t_dodaj(&imiona, \"Ola\")");
+    }
+
+    @Test
+    @DisplayName("lista ułamek → KodekLista_u + lista_u_dodaj")
+    void testVarDeclListaUlamek() {
+        String code = generate("zmienna lista ułamek ceny = [1.5, 2.5]");
+        assertContains(code, "KodekLista_u ceny");
+        assertContains(code, "lista_u_init(&ceny)");
+        assertContains(code, "lista_u_dodaj(&ceny, 1.5)");
+    }
+
+    @Test
+    @DisplayName("lista logiczny → KodekLista (int) + lista_dodaj (1/0)")
+    void testVarDeclListaLogiczny() {
+        String code = generate("zmienna lista logiczny flagi = [prawda, fałsz]");
+        assertContains(code, "KodekLista flagi");
+        assertContains(code, "lista_dodaj(&flagi, 1)");
+        assertContains(code, "lista_dodaj(&flagi, 0)");
+    }
+
+    @Test
+    @DisplayName("lista tekst – dostęp indeksowany → lista_t_get")
+    void testListaTekstAccess() {
+        String code = generate("zmienna lista tekst t = [\"a\"]\npiszln(t[0])");
+        assertContains(code, "lista_t_get(&t, 0)");
+        // element typu tekst → format %s
+        assertContains(code, "printf(\"%s\\n\", lista_t_get(&t, 0))");
+    }
+
+    @Test
+    @DisplayName("lista tekst – for-each iteruje z typem char*")
+    void testListaTekstForEach() {
+        String code = generate("zmienna lista tekst t = [\"a\", \"b\"]\ndla x w t { piszln(x) }");
+        assertContains(code, "lista_t_len(&t)");
+        assertContains(code, "char* x = lista_t_get(&t, _i)");
+    }
+
+    @Test
+    @DisplayName("lista ułamek – dodaj/rozmiar używają wariantu _u")
+    void testListaUlamekBuiltins() {
+        String code = generate("zmienna lista ułamek c = [1.5]\ndodaj(c, 2.5)\npiszln(rozmiar(c))");
+        assertContains(code, "lista_u_dodaj(&c, 2.5)");
+        assertContains(code, "lista_u_len(&c)");
+    }
+
+    @Test
+    @DisplayName("parametr lista tekst → KodekLista_t* (przekazywanie przez wskaźnik)")
+    void testListaTekstParam() {
+        String code = generate("""
+                funkcja f(lista tekst dane) {
+                    piszln(dane[0])
+                }
+                zmienna lista tekst owoce = ["jabłko"]
+                f(owoce)
+                """);
+        assertContains(code, "void f(KodekLista_t* dane)");
+        assertContains(code, "lista_t_get(dane, 0)");  // param – bez &
+        assertContains(code, "f(&owoce)");             // wywołanie – z &
+    }
+
     // =========================================================
     //  PRZYPISANIE
     // =========================================================

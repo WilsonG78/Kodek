@@ -57,7 +57,7 @@ public class CGenerator extends KodekBaseVisitor<String> {
      *  - parametr KodekLista* ("lista_ptr") → "name"  (już jest wskaźnikiem)
      */
     private String listRef(String varName) {
-        return "lista_ptr".equals(lookupVar(varName)) ? varName : "&" + varName;
+        return isListPtr(lookupVar(varName)) ? varName : "&" + varName;
     }
 
     /**
@@ -67,6 +67,13 @@ public class CGenerator extends KodekBaseVisitor<String> {
     private String listRefFromExpr(KodekParser.ExpressionContext expr) {
         String id = extractSimpleId(expr);
         return id != null ? listRef(id) : "&" + visit(expr);
+    }
+
+    /** Kanoniczny typ listy przekazanej jako argument (z tablicy symboli lub inferencji). */
+    private String listTypeOfArg(KodekParser.ExpressionContext expr) {
+        String id = extractSimpleId(expr);
+        String t  = (id != null) ? lookupVar(id) : null;
+        return (t != null) ? t : typeOf(expr);
     }
 
     // =========================================================
@@ -88,12 +95,13 @@ public class CGenerator extends KodekBaseVisitor<String> {
     // =========================================================
 
     private String toCType(String kodekType) {
+        if (isList(kodekType)) return listStruct(listElem(kodekType));
         switch (kodekType) {
             case "liczba":   return "int";
             case "ułamek":   return "double";
             case "tekst":    return "char*";      // dla parametrów funkcji
             case "logiczny": return "int";
-            case "lista":    return "KodekLista"; // dynamiczny vector
+            case "lista":    return "KodekLista"; // dynamiczny vector (legacy)
             default:         return "int";
         }
     }
@@ -106,6 +114,64 @@ public class CGenerator extends KodekBaseVisitor<String> {
             case "logiczny": return "%d";
             default:         return "%d";
         }
+    }
+
+    // =========================================================
+    //  TYPY LIST (element) – kanoniczne kodowanie i mapowanie na C
+    //
+    //  Kanoniczny typ Kodek:
+    //    skalar : "liczba" | "ułamek" | "tekst" | "logiczny"
+    //    lista  : "lista:<element>"          (zmienna/wartość lokalna)
+    //             "lista_ptr:<element>"      (parametr funkcji – wskaźnik)
+    //
+    //  Trzy "kubełki" implementacji C (liczba i logiczny dzielą int):
+    //    int    → KodekLista       / lista_*      (LEGACY – zgodność wsteczna)
+    //    double → KodekLista_u      / lista_u_*
+    //    str    → KodekLista_t      / lista_t_*
+    // =========================================================
+
+    private static boolean isList(String t)    { return t != null && (t.startsWith("lista:") || t.startsWith("lista_ptr:")); }
+    private static boolean isListPtr(String t) { return t != null && t.startsWith("lista_ptr:"); }
+
+    /** Typ elementu listy z kanonicznego typu (domyślnie "liczba"). */
+    private static String listElem(String t) {
+        if (t == null) return "liczba";
+        int i = t.indexOf(':');
+        return (i >= 0) ? t.substring(i + 1) : "liczba";
+    }
+
+    /** Kubełek implementacji C dla typu elementu: "int" | "double" | "str". */
+    private static String listBucket(String elem) {
+        if ("ułamek".equals(elem)) return "double";
+        if ("tekst".equals(elem))  return "str";
+        return "int"; // liczba, logiczny
+    }
+
+    /** Nazwa struktury C dla listy danego typu elementu. */
+    private static String listStruct(String elem) {
+        switch (listBucket(elem)) {
+            case "double": return "KodekLista_u";
+            case "str":    return "KodekLista_t";
+            default:       return "KodekLista";   // legacy (liczba/logiczny)
+        }
+    }
+
+    /** Nazwa funkcji C (init/dodaj/get/set/len) dla listy danego typu elementu. */
+    private static String listFn(String elem, String op) {
+        switch (listBucket(elem)) {
+            case "double": return "lista_u_" + op;
+            case "str":    return "lista_t_" + op;
+            default:       return "lista_" + op;  // legacy
+        }
+    }
+
+    /** Kanoniczna reprezentacja typu Kodek z węzła typeName. */
+    private static String kodekType(KodekParser.TypeNameContext ctx) {
+        if (ctx.getChildCount() > 0 && "lista".equals(ctx.getChild(0).getText())) {
+            String elem = (ctx.scalarType() != null) ? ctx.scalarType().getText() : "liczba";
+            return "lista:" + elem;
+        }
+        return ctx.scalarType().getText();
     }
 
     // =========================================================
@@ -164,9 +230,13 @@ public class CGenerator extends KodekBaseVisitor<String> {
         if (ctx.NUMBER()       != null) return ctx.NUMBER().getText().contains(".") ? "ułamek" : "liczba";
         if (ctx.STRING()       != null) return "tekst";
         if (ctx.BOOLEAN()      != null) return "logiczny";
-        if (ctx.listLiteral()  != null) return "lista";
+        if (ctx.listLiteral()  != null) {
+            // typ elementu wnioskowany z pierwszego elementu (pusta lista → liczba)
+            java.util.List<KodekParser.ExpressionContext> elems = ctx.listLiteral().expression();
+            return "lista:" + (elems.isEmpty() ? "liczba" : typeOf(elems.get(0)));
+        }
         if (ctx.functionCall() != null) return typeOfFunctionCall(ctx.functionCall());
-        if (ctx.listAccess()   != null) return "liczba";
+        if (ctx.listAccess()   != null) return listElem(lookupVar(ctx.listAccess().ID().getText()));
         if (ctx.ID()           != null) {
             String t = lookupVar(ctx.ID().getText());
             return t != null ? t : "liczba";
@@ -207,7 +277,7 @@ public class CGenerator extends KodekBaseVisitor<String> {
         for (KodekParser.StatementContext stmt : programCtx.statement()) {
             KodekParser.FunctionDefContext fctx = extractFunctionDef(stmt);
             if (fctx != null && fctx.typeName() != null) {
-                functionReturnTypes.put(fctx.ID().getText(), fctx.typeName().getText());
+                functionReturnTypes.put(fctx.ID().getText(), kodekType(fctx.typeName()));
             }
         }
 
@@ -267,19 +337,47 @@ public class CGenerator extends KodekBaseVisitor<String> {
     private String generateHelpers() {
         return "/* ===== KodekLista – dynamiczna lista (vector z C++) ===== */\n"
                 + "typedef struct { int* data; int len; int cap; } KodekLista;\n"
-                + "static void lista_init(KodekLista* l) {\n"
+                + "static inline void lista_init(KodekLista* l) {\n"
                 + "    l->data = NULL; l->len = 0; l->cap = 0;\n"
                 + "}\n"
-                + "static void lista_dodaj(KodekLista* l, int val) {\n"
+                + "static inline void lista_dodaj(KodekLista* l, int val) {\n"
                 + "    if (l->len >= l->cap) {\n"
                 + "        l->cap = l->cap == 0 ? 8 : l->cap * 2;\n"
                 + "        l->data = (int*)realloc(l->data, l->cap * sizeof(int));\n"
                 + "    }\n"
                 + "    l->data[l->len++] = val;\n"
                 + "}\n"
-                + "static int lista_get(KodekLista* l, int i) { return l->data[i]; }\n"
-                + "static void lista_set(KodekLista* l, int i, int val) { l->data[i] = val; }\n"
-                + "static int lista_len(KodekLista* l) { return l->len; }\n"
+                + "static inline int lista_get(KodekLista* l, int i) { return l->data[i]; }\n"
+                + "static inline void lista_set(KodekLista* l, int i, int val) { l->data[i] = val; }\n"
+                + "static inline int lista_len(KodekLista* l) { return l->len; }\n"
+                + "\n"
+                + "/* ===== KodekLista_u – lista ułamków (double) ===== */\n"
+                + "typedef struct { double* data; int len; int cap; } KodekLista_u;\n"
+                + "static inline void lista_u_init(KodekLista_u* l) { l->data = NULL; l->len = 0; l->cap = 0; }\n"
+                + "static inline void lista_u_dodaj(KodekLista_u* l, double val) {\n"
+                + "    if (l->len >= l->cap) {\n"
+                + "        l->cap = l->cap == 0 ? 8 : l->cap * 2;\n"
+                + "        l->data = (double*)realloc(l->data, l->cap * sizeof(double));\n"
+                + "    }\n"
+                + "    l->data[l->len++] = val;\n"
+                + "}\n"
+                + "static inline double lista_u_get(KodekLista_u* l, int i) { return l->data[i]; }\n"
+                + "static inline void lista_u_set(KodekLista_u* l, int i, double val) { l->data[i] = val; }\n"
+                + "static inline int lista_u_len(KodekLista_u* l) { return l->len; }\n"
+                + "\n"
+                + "/* ===== KodekLista_t – lista tekstów (char*, kopiowane przez strdup) ===== */\n"
+                + "typedef struct { char** data; int len; int cap; } KodekLista_t;\n"
+                + "static inline void lista_t_init(KodekLista_t* l) { l->data = NULL; l->len = 0; l->cap = 0; }\n"
+                + "static inline void lista_t_dodaj(KodekLista_t* l, const char* val) {\n"
+                + "    if (l->len >= l->cap) {\n"
+                + "        l->cap = l->cap == 0 ? 8 : l->cap * 2;\n"
+                + "        l->data = (char**)realloc(l->data, l->cap * sizeof(char*));\n"
+                + "    }\n"
+                + "    l->data[l->len++] = strdup(val);\n"
+                + "}\n"
+                + "static inline char* lista_t_get(KodekLista_t* l, int i) { return l->data[i]; }\n"
+                + "static inline void lista_t_set(KodekLista_t* l, int i, const char* val) { l->data[i] = strdup(val); }\n"
+                + "static inline int lista_t_len(KodekLista_t* l) { return l->len; }\n"
                 + "\n"
                 + "/* ===== Funkcje pomocnicze tekstu ===== */\n"
                 + "char* _kodek_gora(const char* s) {\n"
@@ -366,7 +464,7 @@ public class CGenerator extends KodekBaseVisitor<String> {
 
     @Override
     public String visitVarDecl(KodekParser.VarDeclContext ctx) {
-        String type = ctx.typeName().getText();
+        String type = kodekType(ctx.typeName());
         String name = ctx.ID().getText();
         declareVar(name, type);
 
@@ -379,18 +477,20 @@ public class CGenerator extends KodekBaseVisitor<String> {
             return "char " + name + "[256] = \"\"";
         }
 
-        // --- lista: KodekLista (dynamiczny vector) ---
-        if (type.equals("lista")) {
+        // --- lista <typ>: KodekLista / KodekLista_u / KodekLista_t (dynamiczny vector) ---
+        if (isList(type)) {
+            String elem   = listElem(type);
+            String struct = listStruct(elem);
             // Generuj gotowy wieloliniowy kod; visitSimpleStmt wykryje \n i nie doda ";"
             StringBuilder sb = new StringBuilder();
-            sb.append(indent()).append("KodekLista ").append(name)
-                    .append("; lista_init(&").append(name).append(");\n");
+            sb.append(indent()).append(struct).append(" ").append(name)
+                    .append("; ").append(listFn(elem, "init")).append("(&").append(name).append(");\n");
             if (ctx.expression() != null) {
                 KodekParser.ListLiteralContext listLit = extractListLiteral(ctx.expression());
                 if (listLit != null) {
-                    for (KodekParser.ExpressionContext elem : listLit.expression()) {
-                        sb.append(indent()).append("lista_dodaj(&").append(name)
-                                .append(", ").append(visit(elem)).append(");\n");
+                    for (KodekParser.ExpressionContext el : listLit.expression()) {
+                        sb.append(indent()).append(listFn(elem, "dodaj")).append("(&").append(name)
+                                .append(", ").append(visit(el)).append(");\n");
                     }
                 }
             }
@@ -450,9 +550,10 @@ public class CGenerator extends KodekBaseVisitor<String> {
 
         if (ctx.expression().size() == 2) {
             // lista[i] = val  →  lista_set(&name, i, val)  lub  lista_set(name, i, val) gdy ptr
+            String elem  = listElem(varType);
             String index = visit(ctx.expression(0));
             String val   = visit(ctx.expression(1));
-            return "lista_set(" + listRef(name) + ", " + index + ", " + val + ")";
+            return listFn(elem, "set") + "(" + listRef(name) + ", " + index + ", " + val + ")";
         } else {
             String val = visit(ctx.expression(0));
             // tekst: przypisanie przez strcpy (char[] nie może być przypisane przez =)
@@ -580,7 +681,8 @@ public class CGenerator extends KodekBaseVisitor<String> {
     public String visitListAccess(KodekParser.ListAccessContext ctx) {
         // name[i]  →  lista_get(&name, i)  lub  lista_get(name, i) gdy ptr
         String varName = ctx.ID().getText();
-        return "lista_get(" + listRef(varName) + ", " + visit(ctx.expression()) + ")";
+        String elem    = listElem(lookupVar(varName));
+        return listFn(elem, "get") + "(" + listRef(varName) + ", " + visit(ctx.expression()) + ")";
     }
 
     // =========================================================
@@ -702,15 +804,22 @@ public class CGenerator extends KodekBaseVisitor<String> {
             String listCRef = (listName != null) ? listRef(listName)
                     : "&" + visit(ctx.expression(0));
 
+            // Typ elementu listy (z deklaracji zmiennej) – iterator dostaje ten typ
+            String listType = (listName != null) ? lookupVar(listName) : typeOf(ctx.expression(0));
+            String elem     = listElem(listType);
+            String elemCType = toCType(elem);
+
             pushScope();
-            declareVar(varName, "liczba");  // typ elementu – uproszczenie: int
+            declareVar(varName, elem);
 
             sb.append(indent())
-                    .append("for (int _i = 0; _i < lista_len(").append(listCRef).append("); _i++) {\n");
+                    .append("for (int _i = 0; _i < ").append(listFn(elem, "len"))
+                    .append("(").append(listCRef).append("); _i++) {\n");
             indentLevel++;
 
-            sb.append(indent()).append("int ").append(varName)
-                    .append(" = lista_get(").append(listCRef).append(", _i);\n");
+            sb.append(indent()).append(elemCType).append(" ").append(varName)
+                    .append(" = ").append(listFn(elem, "get"))
+                    .append("(").append(listCRef).append(", _i);\n");
 
             // Odwiedź instrukcje bloku bezpośrednio (zakres iteratora jest już otwarty)
             for (KodekParser.LoopStatementContext stmt : ctx.loopBlock().loopStatement()) {
@@ -781,7 +890,7 @@ public class CGenerator extends KodekBaseVisitor<String> {
     @Override
     public String visitFunctionDef(KodekParser.FunctionDefContext ctx) {
         String name = ctx.ID().getText();
-        String kodekReturnType = (ctx.typeName() != null) ? ctx.typeName().getText() : "void";
+        String kodekReturnType = (ctx.typeName() != null) ? kodekType(ctx.typeName()) : "void";
         functionReturnTypes.put(name, kodekReturnType);
 
         // Mapuj typ zwracany
@@ -821,18 +930,21 @@ public class CGenerator extends KodekBaseVisitor<String> {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < ctx.typeName().size(); i++) {
             if (i > 0) sb.append(", ");
-            String type  = ctx.typeName(i).getText();
+            String type  = kodekType(ctx.typeName(i));
             String pname = ctx.ID(i).getText();
-            // lista param jest KodekLista* – zapamiętujemy jako "lista_ptr" by listRef() mogło
-            // pominąć & (inaczej powstawałby KodekLista** przy lista_get/lista_set)
-            declareVar(pname, type.equals("lista") ? "lista_ptr" : type);
-            if (type.equals("tekst")) {
+            // lista param jest <Struct>* – zapamiętujemy jako "lista_ptr:<elem>" by listRef()
+            // pominął & (inaczej powstawałby <Struct>** przy lista_get/lista_set)
+            if (isList(type)) {
+                String elem = listElem(type);
+                declareVar(pname, "lista_ptr:" + elem);
+                // lista przez wskaźnik – modyfikacje wewnątrz funkcji są widoczne na zewnątrz
+                sb.append(listStruct(elem)).append("* ").append(pname);
+            } else if (type.equals("tekst")) {
+                declareVar(pname, type);
                 // tekst przez wskaźnik (char*) – standardowe C
                 sb.append("char* ").append(pname);
-            } else if (type.equals("lista")) {
-                // lista przez wskaźnik – modyfikacje wewnątrz funkcji są widoczne na zewnątrz
-                sb.append("KodekLista* ").append(pname);
             } else {
+                declareVar(pname, type);
                 sb.append(toCType(type)).append(" ").append(pname);
             }
         }
@@ -877,16 +989,20 @@ public class CGenerator extends KodekBaseVisitor<String> {
                 return "0";
             case "rozmiar":
                 if (ctx.argumentList() != null) {
-                    String ref = listRefFromExpr(ctx.argumentList().expression(0));
-                    return "lista_len(" + ref + ")";
+                    KodekParser.ExpressionContext arg = ctx.argumentList().expression(0);
+                    String ref = listRefFromExpr(arg);
+                    String el  = listElem(listTypeOfArg(arg));
+                    return listFn(el, "len") + "(" + ref + ")";
                 }
                 return "0";
             case "dodaj":
                 // dodaj(lista, element)  →  lista_dodaj(&lista, element)  lub  lista_dodaj(lista,…) gdy ptr
                 if (ctx.argumentList() != null && ctx.argumentList().expression().size() >= 2) {
-                    String ref  = listRefFromExpr(ctx.argumentList().expression(0));
+                    KodekParser.ExpressionContext arg = ctx.argumentList().expression(0);
+                    String ref  = listRefFromExpr(arg);
+                    String el   = listElem(listTypeOfArg(arg));
                     String elem = visit(ctx.argumentList().expression(1));
-                    return "lista_dodaj(" + ref + ", " + elem + ")";
+                    return listFn(el, "dodaj") + "(" + ref + ", " + elem + ")";
                 }
                 return "/* dodaj: nieprawidłowe argumenty */";
         }
@@ -907,12 +1023,12 @@ public class CGenerator extends KodekBaseVisitor<String> {
             KodekParser.ExpressionContext expr = ctx.expression(i);
             String id   = extractSimpleId(expr);
             String type = (id != null) ? lookupVar(id) : null;
-            if ("lista".equals(type)) {
-                // Lokalna KodekLista → funkcja oczekuje KodekLista*, przekazujemy &id
-                sb.append("&").append(id);
-            } else if ("lista_ptr".equals(type)) {
-                // Parametr KodekLista* → już jest wskaźnikiem, przekazujemy as-is
+            if (isListPtr(type)) {
+                // Parametr <Struct>* → już jest wskaźnikiem, przekazujemy as-is
                 sb.append(id);
+            } else if (isList(type)) {
+                // Lokalna lista → funkcja oczekuje <Struct>*, przekazujemy &id
+                sb.append("&").append(id);
             } else {
                 sb.append(visit(expr));
             }

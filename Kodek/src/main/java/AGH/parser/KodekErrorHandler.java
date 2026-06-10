@@ -94,7 +94,9 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         BUILTINS.put("losowa_liczba",       new FunctionInfo("liczba",  List.of("liczba","liczba")));
         BUILTINS.put("długość",             new FunctionInfo("liczba",  List.of("tekst")));
         BUILTINS.put("rozmiar",             new FunctionInfo("liczba",  List.of("lista")));
-        BUILTINS.put("dodaj",               new FunctionInfo("void",    List.of("lista","liczba")));
+        // dodaj(lista, element): element jest sprawdzany osobno (musi pasować do typu listy),
+        // dlatego drugi parametr jest oznaczony jako dowolny "*"
+        BUILTINS.put("dodaj",               new FunctionInfo("void",    List.of("lista","*")));
     }
 
     // =========================================================
@@ -111,6 +113,8 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         prescanFunctions(tree);
         visit(tree);
         popScope();
+        // Osobny przebieg: dzielenie przez literał 0 w dowolnym kontekście
+        checkDivisionByZero(tree);
     }
 
     public boolean hasErrors() { return !errors.isEmpty(); }
@@ -138,11 +142,11 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
     private void registerFunction(KodekParser.FunctionDefContext ctx) {
         String name       = ctx.ID().getText();
-        String returnType = (ctx.typeName() != null) ? ctx.typeName().getText() : "void";
+        String returnType = (ctx.typeName() != null) ? kodekType(ctx.typeName()) : "void";
         List<String> paramTypes = new ArrayList<>();
         if (ctx.paramList() != null) {
             for (KodekParser.TypeNameContext t : ctx.paramList().typeName()) {
-                paramTypes.add(t.getText());
+                paramTypes.add(kodekType(t));
             }
         }
         functions.put(name, new FunctionInfo(returnType, paramTypes));
@@ -154,17 +158,6 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
     private void pushScope() { scopeStack.push(new LinkedHashMap<>()); }
     private void popScope()  { if (!scopeStack.isEmpty()) scopeStack.pop(); }
-
-    private void declareVar(String name, String type) {
-        if (!scopeStack.isEmpty()) {
-            if (scopeStack.peek().containsKey(name)) {
-                // błąd: ponowna deklaracja – linia nieznana tu, dlatego -1
-                addError(-1, -1,
-                        "zmienna '" + name + "' już istnieje w tym zakresie");
-            }
-            scopeStack.peek().put(name, type);
-        }
-    }
 
     private String lookupVar(String name) {
         for (Map<String, String> scope : scopeStack) {
@@ -201,7 +194,7 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
     @Override
     public Void visitVarDecl(KodekParser.VarDeclContext ctx) {
-        String type = ctx.typeName().getText();
+        String type = kodekType(ctx.typeName());
         String name = ctx.ID().getText();
         Token  tok  = ctx.ID().getSymbol();
 
@@ -218,8 +211,8 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
             String exprType = inferType(ctx.expression());
             if (!typesCompatible(type, exprType)) {
                 addError(tok,
-                        "niezgodność typów: zmienna '" + name + "' jest typu '" + type
-                                + "', ale wyrażenie ma typ '" + exprType + "'");
+                        "niezgodność typów: zmienna '" + name + "' jest typu '" + pretty(type)
+                                + "', ale wyrażenie ma typ '" + pretty(exprType) + "'");
             }
             visit(ctx.expression());
         }
@@ -240,9 +233,17 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
             addError(tok, "użycie niezadeklarowanej zmiennej '" + name + "'");
         } else if (ctx.expression().size() == 2) {
             // lista[i] = val
-            if (!"lista".equals(varType)) {
+            if (!isList(varType)) {
                 addError(tok,
-                        "indeksowanie tablicy: '" + name + "' nie jest listą (typ: '" + varType + "')");
+                        "indeksowanie tablicy: '" + name + "' nie jest listą (typ: '" + pretty(varType) + "')");
+            } else {
+                String elem = listElem(varType);
+                String valType = inferType(ctx.expression(1));
+                if (!typesCompatible(elem, valType)) {
+                    addError(tok,
+                            "niezgodność typów: lista '" + name + "' przechowuje '" + pretty(elem)
+                                    + "', a przypisywana wartość ma typ '" + pretty(valType) + "'");
+                }
             }
             visit(ctx.expression(0));
             visit(ctx.expression(1));
@@ -252,7 +253,7 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
             if (!typesCompatible(varType, exprType)) {
                 addError(tok,
                         "niezgodność typów przy przypisaniu do '" + name + "': "
-                                + "oczekiwano '" + varType + "', dostano '" + exprType + "'");
+                                + "oczekiwano '" + pretty(varType) + "', dostano '" + pretty(exprType) + "'");
             }
             visit(ctx.expression(0));
         }
@@ -271,9 +272,9 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
         if (varType == null) {
             addError(tok, "użycie niezadeklarowanej zmiennej '" + name + "'");
-        } else if (!"lista".equals(varType)) {
+        } else if (!isList(varType)) {
             addError(tok,
-                    "indeksowanie: '" + name + "' nie jest listą (typ: '" + varType + "')");
+                    "indeksowanie: '" + name + "' nie jest listą (typ: '" + pretty(varType) + "')");
         }
         visit(ctx.expression());
         return null;
@@ -315,8 +316,8 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
                     if (!"*".equals(expectedType) && !typesCompatible(expectedType, actualType)) {
                         addError(tok,
                                 "argument " + (i + 1) + " funkcji '" + name
-                                        + "': oczekiwano '" + expectedType
-                                        + "', podano '" + actualType + "'");
+                                        + "': oczekiwano '" + pretty(expectedType)
+                                        + "', podano '" + pretty(actualType) + "'");
                     }
                 }
             }
@@ -324,9 +325,6 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
         // Odwiedź argumenty
         if (ctx.argumentList() != null) visit(ctx.argumentList());
-
-        // Sprawdź dzielenie przez zero w argumentach (dodatkowe)
-        checkDivisionByZero(ctx);
 
         return null;
     }
@@ -338,7 +336,7 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
     @Override
     public Void visitFunctionDef(KodekParser.FunctionDefContext ctx) {
         String name       = ctx.ID().getText();
-        String returnType = (ctx.typeName() != null) ? ctx.typeName().getText() : "void";
+        String returnType = (ctx.typeName() != null) ? kodekType(ctx.typeName()) : "void";
 
         String previousFunc = currentFuncName;
         currentFuncName = name;
@@ -348,7 +346,7 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         // Zarejestruj parametry w nowym zakresie
         if (ctx.paramList() != null) {
             for (int i = 0; i < ctx.paramList().ID().size(); i++) {
-                String pType = ctx.paramList().typeName(i).getText();
+                String pType = kodekType(ctx.paramList().typeName(i));
                 String pName = ctx.paramList().ID(i).getText();
                 scopeStack.peek().put(pName, pType);
             }
@@ -358,7 +356,7 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         boolean hasReturn = blockHasReturn(ctx.block());
         if (!"void".equals(returnType) && !hasReturn) {
             addError(ctx.ID().getSymbol(),
-                    "funkcja '" + name + "' powinna zwracać '" + returnType
+                    "funkcja '" + name + "' powinna zwracać '" + pretty(returnType)
                             + "', ale brakuje instrukcji 'zwróć'");
         }
 
@@ -391,8 +389,8 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
                     Token tok = ((TerminalNode) ctx.getChild(0)).getSymbol();
                     addError(tok,
                             "typ zwracanej wartości w '" + currentFuncName
-                                    + "': oczekiwano '" + info.returnType
-                                    + "', zwracany jest '" + exprType + "'");
+                                    + "': oczekiwano '" + pretty(info.returnType)
+                                    + "', zwracany jest '" + pretty(exprType) + "'");
                 }
             }
         }
@@ -419,10 +417,10 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         } else {
             // dla elem w lista
             String listExprType = inferType(ctx.expression(0));
-            if (!"lista".equals(listExprType)) {
+            if (!isList(listExprType) && !UNKNOWN.equals(listExprType)) {
                 addError(ctx.ID().getSymbol(),
                         "pętla 'dla ... w': wyrażenie nie jest listą (typ: '"
-                                + listExprType + "')");
+                                + pretty(listExprType) + "')");
             }
             visit(ctx.expression(0));
         }
@@ -617,39 +615,74 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         if (ctx.NUMBER()      != null) return ctx.NUMBER().getText().contains(".") ? "ułamek" : "liczba";
         if (ctx.STRING()      != null) return "tekst";
         if (ctx.BOOLEAN()     != null) return "logiczny";
-        if (ctx.listLiteral() != null) return "lista";
+        if (ctx.listLiteral() != null) {
+            List<KodekParser.ExpressionContext> elems = ctx.listLiteral().expression();
+            return "lista:" + (elems.isEmpty() ? UNKNOWN : inferType(elems.get(0)));
+        }
         if (ctx.functionCall()!= null) return inferFunctionCall(ctx.functionCall());
-        if (ctx.listAccess()  != null) return "liczba";
+        if (ctx.listAccess()  != null) return listElem(lookupVar(ctx.listAccess().ID().getText()));
         if (ctx.ID()          != null) {
             String t = lookupVar(ctx.ID().getText());
-            return t != null ? t : "liczba";
+            return t != null ? t : UNKNOWN;   // niezadeklarowana zmienna – typ nieznany
         }
-        return "liczba";
+        return UNKNOWN;
     }
 
     private String inferFunctionCall(KodekParser.FunctionCallContext ctx) {
         String name = ctx.ID().getText();
         FunctionInfo info = functions.get(name);
         if (info == null) info = BUILTINS.get(name);
-        return (info != null) ? info.returnType : "liczba";
+        return (info != null) ? info.returnType : UNKNOWN;
     }
 
     // =========================================================
     //  POMOCNICZE
     // =========================================================
 
+    /** Sentinel: typ, którego nie udało się ustalić (np. zmienna niezadeklarowana). */
+    private static final String UNKNOWN = "?";
+
+    // ---- pomocniki typów list (kanoniczne: "lista", "lista:tekst", ...) ----
+
+    /** Czy typ oznacza listę (z lub bez sprecyzowanego typu elementu)? */
+    private static boolean isList(String t) { return t != null && t.startsWith("lista"); }
+
+    /** Typ elementu listy; "lista" bez ':' = element nieznany (wildcard). */
+    private static String listElem(String t) {
+        if (t == null) return UNKNOWN;
+        int i = t.indexOf(':');
+        return (i >= 0) ? t.substring(i + 1) : UNKNOWN;
+    }
+
+    /** Czytelna dla użytkownika postać typu w komunikatach ("lista:tekst" → "lista tekst"). */
+    private static String pretty(String t) {
+        return (t == null) ? null : t.replace("lista:", "lista ");
+    }
+
+    /** Kanoniczna reprezentacja typu Kodek z węzła typeName ("liczba", "lista:tekst", ...). */
+    private static String kodekType(KodekParser.TypeNameContext ctx) {
+        if (ctx.getChildCount() > 0 && "lista".equals(ctx.getChild(0).getText())) {
+            return (ctx.scalarType() != null) ? "lista:" + ctx.scalarType().getText() : "lista:liczba";
+        }
+        return ctx.scalarType().getText();
+    }
+
     /**
      * Sprawdza czy typ wyrażenia jest kompatybilny z typem docelowym.
      * Uproszczone reguły:
      *   liczba  ↔ ułamek   (niejawna konwersja liczbowa)
-     *   każdy   ↔ każdy    gdy któryś to "liczba" (niezarejestrowana zmienna – łagodnie)
+     *   "?"     ↔ każdy     gdy typ jest nieznany – nie blokujemy (unikamy fałszywych alarmów)
+     *   lista   ↔ lista     zgodne gdy zgodne są typy elementów (lub któryś nieokreślony)
+     * Twarde niezgodności (np. tekst ↔ liczba, lista tekstów ↔ lista liczb) są zgłaszane jako błąd.
      */
     private boolean typesCompatible(String expected, String actual) {
+        if (expected == null || actual == null)         return true;
+        if (UNKNOWN.equals(expected) || UNKNOWN.equals(actual)) return true;
         if (expected.equals(actual))                    return true;
+        if (isList(expected) && isList(actual))         return typesCompatible(listElem(expected), listElem(actual));
+        if (isList(expected) || isList(actual))         return false;
         if ("liczba".equals(actual) && "ułamek".equals(expected)) return true;
         if ("ułamek".equals(actual) && "liczba".equals(expected)) return true;
-        // gdy typ jest nieznany (np. niezarejestrowana zmienna) – nie blokuj
-        if ("liczba".equals(actual) || "liczba".equals(expected)) return true;
         return false;
     }
 
@@ -676,37 +709,43 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
     }
 
     /**
-     * Sprawdza dzielenie przez literał 0 w wywołaniu lub wyrażeniu.
-     * Skanuje Term pod kątem "/" lub "%" a następny Factor to atom "0".
+     * Sprawdza dzielenie przez literał 0 w DOWOLNYM kontekście (deklaracje, przypisania,
+     * argumenty funkcji, pisz()/piszln(), warunki itd.). Przechodzi całe drzewo i bada
+     * każdy węzeł Term pod kątem operatora "/" lub "%", po którym następny czynnik (factor)
+     * jest literałem 0.
      */
-    private void checkDivisionByZero(KodekParser.FunctionCallContext ctx) {
-        if (ctx.argumentList() == null) return;
-        for (KodekParser.ExpressionContext expr : ctx.argumentList().expression()) {
-            checkDivByZeroInExpr(expr);
+    private void checkDivisionByZero(ParseTree node) {
+        if (node instanceof KodekParser.TermContext) {
+            checkTermForDivByZero((KodekParser.TermContext) node);
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            checkDivisionByZero(node.getChild(i));
         }
     }
 
-    private void checkDivByZeroInExpr(KodekParser.ExpressionContext expr) {
-        try {
-            for (KodekParser.TermContext term :
-                    expr.logicalOr().logicalAnd(0).negation(0).comparison().arithmetic(0).term()) {
-                List<KodekParser.FactorContext> factors = term.factor();
-                for (int i = 1; i < factors.size(); i++) {
-                    String op = term.getChild(2 * i - 1).getText();
-                    if ("/".equals(op) || "%".equals(op)) {
-                        KodekParser.FactorContext divisorFactor = factors.get(i);
-                        if (divisorFactor.base() != null
-                                && divisorFactor.base().atom() != null
-                                && divisorFactor.base().atom().NUMBER() != null) {
-                            String numText = divisorFactor.base().atom().NUMBER().getText();
-                            if ("0".equals(numText) || "0.0".equals(numText)) {
-                                Token tok = divisorFactor.base().atom().NUMBER().getSymbol();
-                                addError(tok, "dzielenie przez zero");
-                            }
-                        }
-                    }
+    private void checkTermForDivByZero(KodekParser.TermContext term) {
+        List<KodekParser.FactorContext> factors = term.factor();
+        for (int i = 1; i < factors.size(); i++) {
+            String op = term.getChild(2 * i - 1).getText();
+            if (!"/".equals(op) && !"%".equals(op)) continue;
+            KodekParser.FactorContext divisor = factors.get(i);
+            if (divisor.base() != null
+                    && divisor.base().atom() != null
+                    && divisor.base().atom().NUMBER() != null) {
+                String numText = divisor.base().atom().NUMBER().getText();
+                if (isZeroLiteral(numText)) {
+                    addError(divisor.base().atom().NUMBER().getSymbol(), "dzielenie przez zero");
                 }
             }
-        } catch (Exception ignored) { /* nie wszystkie ścieżki gramatyczne tu docierają */ }
+        }
+    }
+
+    /** Czy literał liczbowy reprezentuje zero (np. "0", "0.0", "0.000")? */
+    private boolean isZeroLiteral(String numText) {
+        try {
+            return Double.parseDouble(numText) == 0.0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 }
