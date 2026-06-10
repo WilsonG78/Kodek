@@ -101,13 +101,16 @@ public class WebServer {
             parser.removeErrorListeners();
 
             StringBuilder parseErrors = new StringBuilder();
+
             parser.addErrorListener(new BaseErrorListener() {
                 @Override
                 public void syntaxError(Recognizer<?, ?> r, Object sym, int line, int col,
                                         String msg, RecognitionException e) {
+                    String simplified = msg.replaceAll(" expecting \\{[^}]*\\}", "")
+                            .replaceAll(" expecting '[^']*'", "");
                     parseErrors.append("Błąd składni linia ").append(line)
                             .append(", kolumna ").append(col)
-                            .append(": ").append(msg).append("\n");
+                            .append(": ").append(simplified).append("\n");
                 }
             });
 

@@ -22,15 +22,15 @@ import java.util.*;
  * 10.  Użycie operatora arytmetycznego na typie tekst / logiczny
  * 11.  Wywołanie czytaj() / pisz() z nieprawidłowym argumentem
  * 12.  Dzielenie przez zero (tylko dla literałów)
+ * 13.  Redeklaracja wbudowanej funkcji (np. 'funkcja pisz(...)')
+ * 14.  Zmienna zasłaniająca nazwę funkcji użytkownika
+ * 15.  Wynik funkcji void użyty w wyrażeniu (jako argument lub operand)
+ * 16.  Puste ciało funkcji nieVoid (brak jakichkolwiek instrukcji)
+ * 17.  Ujemny literał jako indeks listy
+ * 18.  Użycie operatora arytmetycznego / porównania na typie logiczny
+ * 19.  Wywołanie funkcji jako instrukcja gdy funkcja zwraca wartość (ostrzeżenie o ignorowanym wyniku)
+ * 20.  Deklaracja zmiennej o nazwie takiej samej jak wbudowana funkcja
  *
- * Użycie w Main.java (wstaw między fazą 2 a fazą 3):
- *
- *   KodekErrorHandler errorHandler = new KodekErrorHandler();
- *   errorHandler.check(tree);
- *   if (errorHandler.hasErrors()) {
- *       errorHandler.printErrors(System.err);
- *       System.exit(1);
- *   }
  */
 public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
@@ -149,6 +149,13 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
                 paramTypes.add(kodekType(t));
             }
         }
+
+        // Błąd 13: redeklaracja wbudowanej funkcji
+        if (BUILTINS.containsKey(name)) {
+            addError(ctx.ID().getSymbol(),
+                    "redeklaracja wbudowanej funkcji '" + name + "' jest niedozwolona");
+        }
+
         functions.put(name, new FunctionInfo(returnType, paramTypes));
     }
 
@@ -198,7 +205,19 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         String name = ctx.ID().getText();
         Token  tok  = ctx.ID().getSymbol();
 
-        // Sprawdź czy nazwa nie koliduje z istniejącą zmienną w bieżącym zakresie
+        // Błąd 22: zmienna o nazwie takiej samej jak wbudowana funkcja
+        if (BUILTINS.containsKey(name)) {
+            addError(tok,
+                    "nazwa zmiennej '" + name + "' koliduje z wbudowaną funkcją o tej samej nazwie");
+        }
+
+        // Błąd 14: zmienna zasłaniająca nazwę funkcji użytkownika
+        if (functions.containsKey(name)) {
+            addError(tok,
+                    "zmienna '" + name + "' zasłania zdefiniowaną funkcję o tej samej nazwie");
+        }
+
+        // Błąd 2: Sprawdź czy nazwa nie koliduje z istniejącą zmienną w bieżącym zakresie
         if (!scopeStack.isEmpty() && scopeStack.peek().containsKey(name)) {
             addError(tok,
                     "zmienna '" + name + "' jest już zadeklarowana w tym zakresie");
@@ -209,6 +228,10 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         // Sprawdź wyrażenie inicjalizujące
         if (ctx.expression() != null) {
             String exprType = inferType(ctx.expression());
+
+            // Błąd 16: wynik void użyty jako wartość inicjalizująca
+            checkVoidUsedAsValue(ctx.expression(), tok);
+
             if (!typesCompatible(type, exprType)) {
                 addError(tok,
                         "niezgodność typów: zmienna '" + name + "' jest typu '" + pretty(type)
@@ -233,6 +256,10 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
             addError(tok, "użycie niezadeklarowanej zmiennej '" + name + "'");
         } else if (ctx.expression().size() == 2) {
             // lista[i] = val
+
+            // Błąd 18: ujemny literał jako indeks
+            checkNegativeIndex(ctx.expression(0), tok);
+
             if (!isList(varType)) {
                 addError(tok,
                         "indeksowanie tablicy: '" + name + "' nie jest listą (typ: '" + pretty(varType) + "')");
@@ -250,6 +277,10 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         } else {
             // zwykłe przypisanie
             String exprType = inferType(ctx.expression(0));
+
+            // Błąd 16: wynik void użyty jako wartość
+            checkVoidUsedAsValue(ctx.expression(0), tok);
+
             if (!typesCompatible(varType, exprType)) {
                 addError(tok,
                         "niezgodność typów przy przypisaniu do '" + name + "': "
@@ -276,6 +307,10 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
             addError(tok,
                     "indeksowanie: '" + name + "' nie jest listą (typ: '" + pretty(varType) + "')");
         }
+
+        // Błąd 18: ujemny literał jako indeks
+        checkNegativeIndex(ctx.expression(), tok);
+
         visit(ctx.expression());
         return null;
     }
@@ -313,6 +348,10 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
                 for (int i = 0; i < Math.min(given, expected); i++) {
                     String expectedType = info.paramTypes.get(i);
                     String actualType   = inferType(args.get(i));
+
+                    // Błąd 16: wynik void użyty jako argument
+                    checkVoidUsedAsValue(args.get(i), tok);
+
                     if (!"*".equals(expectedType) && !typesCompatible(expectedType, actualType)) {
                         addError(tok,
                                 "argument " + (i + 1) + " funkcji '" + name
@@ -327,6 +366,28 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         if (ctx.argumentList() != null) visit(ctx.argumentList());
 
         return null;
+    }
+
+    // =========================================================
+    //  WYWOŁANIE FUNKCJI JAKO SAMODZIELNA INSTRUKCJA (simpleStmt)
+    // =========================================================
+
+    @Override
+    public Void visitSimpleStmt(KodekParser.SimpleStmtContext ctx) {
+        // Błąd 21: wywołanie funkcji z typem zwracanym użyte jako instrukcja –
+        //          wynik jest po cichu ignorowany (ostrzeżenie)
+        if (ctx.functionCall() != null) {
+            KodekParser.FunctionCallContext fc = ctx.functionCall();
+            String fname = fc.ID().getText();
+            FunctionInfo info = functions.get(fname);
+            if (info == null) info = BUILTINS.get(fname);
+            if (info != null && !"void".equals(info.returnType)) {
+                addError(fc.ID().getSymbol(),
+                        "wynik funkcji '" + fname + "' (typ: '" + pretty(info.returnType)
+                                + "') jest ignorowany – czy to zamierzone?");
+            }
+        }
+        return visitChildren(ctx);
     }
 
     // =========================================================
@@ -352,9 +413,16 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
             }
         }
 
-        // Sprawdź ciało
+        // Błąd 17: puste ciało funkcji nieVoid
+        if (!"void".equals(returnType) && ctx.block().statement().isEmpty()) {
+            addError(ctx.ID().getSymbol(),
+                    "funkcja '" + name + "' powinna zwracać '" + pretty(returnType)
+                            + "', ale jej ciało jest puste");
+        }
+
+        // Sprawdź ciało (błąd 8: brak zwróć w nieVoid)
         boolean hasReturn = blockHasReturn(ctx.block());
-        if (!"void".equals(returnType) && !hasReturn) {
+        if (!"void".equals(returnType) && !ctx.block().statement().isEmpty() && !hasReturn) {
             addError(ctx.ID().getSymbol(),
                     "funkcja '" + name + "' powinna zwracać '" + pretty(returnType)
                             + "', ale brakuje instrukcji 'zwróć'");
@@ -384,6 +452,10 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
                         "funkcja '" + currentFuncName
                                 + "' jest void – nie powinna zwracać wartości");
             } else if (info != null) {
+                // Błąd 16: wynik void użyty jako zwracana wartość
+                checkVoidUsedAsValue(ctx.expression(),
+                        ((TerminalNode) ctx.getChild(0)).getSymbol());
+
                 String exprType = inferType(ctx.expression());
                 if (!typesCompatible(info.returnType, exprType)) {
                     Token tok = ((TerminalNode) ctx.getChild(0)).getSymbol();
@@ -520,6 +592,64 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
     }
 
     // =========================================================
+    //  ARYTMETYKA – sprawdź typy operandów (błędy 10, 20)
+    // =========================================================
+
+    @Override
+    public Void visitArithmetic(KodekParser.ArithmeticContext ctx) {
+        // Sprawdź operandy tylko gdy faktycznie jest operator (+, -)
+        if (ctx.term().size() > 1) {
+            for (KodekParser.TermContext t : ctx.term()) {
+                String type = inferTerm(t);
+                Token  tok  = getFirstToken(t);
+                if ("tekst".equals(type)) {
+                    addError(tok,
+                            "operator arytmetyczny (+/-) użyty na wartości typu 'tekst'");
+                } else if ("logiczny".equals(type)) {
+                    addError(tok,
+                            "operator arytmetyczny (+/-) użyty na wartości typu 'logiczny'");
+                }
+            }
+        }
+        return visitChildren(ctx);
+    }
+
+    @Override
+    public Void visitTerm(KodekParser.TermContext ctx) {
+        // Sprawdź operandy gdy faktycznie jest operator (*, /, %)
+        if (ctx.factor().size() > 1) {
+            for (KodekParser.FactorContext f : ctx.factor()) {
+                String type = inferFactor(f);
+                Token  tok  = getFirstToken(f);
+                if ("tekst".equals(type)) {
+                    addError(tok,
+                            "operator arytmetyczny (*/%) użyty na wartości typu 'tekst'");
+                } else if ("logiczny".equals(type)) {
+                    addError(tok,
+                            "operator arytmetyczny (*/%) użyty na wartości typu 'logiczny'");
+                }
+            }
+        }
+        return visitChildren(ctx);
+    }
+
+    @Override
+    public Void visitComparison(KodekParser.ComparisonContext ctx) {
+        // Błąd 20: operator porównania na typie logiczny (np. prawda > fałsz)
+        if (!ctx.compOp().isEmpty()) {
+            for (KodekParser.ArithmeticContext a : ctx.arithmetic()) {
+                String type = inferArithmetic(a);
+                Token  tok  = getFirstToken(a);
+                if ("logiczny".equals(type)) {
+                    addError(tok,
+                            "operator porównania użyty na wartości typu 'logiczny'");
+                }
+            }
+        }
+        return visitChildren(ctx);
+    }
+
+    // =========================================================
     //  READ / WRITE
     // =========================================================
 
@@ -535,6 +665,8 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
     @Override
     public Void visitWriteStmt(KodekParser.WriteStmtContext ctx) {
+        // Błąd 16: wynik void użyty jako argument pisz/piszln
+        checkVoidUsedAsValue(ctx.expression(), ((TerminalNode) ctx.getChild(0)).getSymbol());
         visit(ctx.expression());
         return null;
     }
@@ -747,5 +879,157 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         } catch (NumberFormatException e) {
             return false;
         }
+    }
+
+    // =========================================================
+    //  NOWE SPRAWDZENIA – METODY POMOCNICZE
+    // =========================================================
+
+    /**
+     * Błąd 16: sprawdza czy wyrażenie jest wywołaniem funkcji void i jeśli tak,
+     * zgłasza błąd – wynik void nie może być użyty jako wartość.
+     */
+    private void checkVoidUsedAsValue(KodekParser.ExpressionContext expr, Token contextTok) {
+        if (expr == null) return;
+        // Szybkie sprawdzenie: wyrażenie to bezpośrednio atom z functionCall?
+        KodekParser.FunctionCallContext fc = extractDirectFunctionCall(expr);
+        if (fc == null) return;
+        String fname = fc.ID().getText();
+        FunctionInfo info = functions.get(fname);
+        if (info == null) info = BUILTINS.get(fname);
+        if (info != null && "void".equals(info.returnType)) {
+            Token tok = (contextTok != null) ? contextTok : fc.ID().getSymbol();
+            addError(tok,
+                    "funkcja '" + fname + "' nie zwraca wartości (void) – "
+                            + "jej wynik nie może być użyty jako wartość");
+        }
+    }
+
+    /**
+     * Zwraca FunctionCallContext jeśli wyrażenie sprowadza się wyłącznie do
+     * pojedynczego wywołania funkcji (bez żadnych operatorów), null w pozostałych przypadkach.
+     */
+    private KodekParser.FunctionCallContext extractDirectFunctionCall(KodekParser.ExpressionContext expr) {
+        try {
+            KodekParser.LogicalOrContext  lor  = expr.logicalOr();
+            if (lor.logicalAnd().size() != 1) return null;
+            KodekParser.LogicalAndContext land = lor.logicalAnd(0);
+            if (land.negation().size() != 1)  return null;
+            KodekParser.NegationContext   neg  = land.negation(0);
+            if (neg.negation() != null)       return null;
+            KodekParser.ComparisonContext  cmp  = neg.comparison();
+            if (!cmp.compOp().isEmpty())      return null;
+            KodekParser.ArithmeticContext  arith = cmp.arithmetic(0);
+            if (arith.term().size() != 1)     return null;
+            KodekParser.TermContext        term  = arith.term(0);
+            if (term.factor().size() != 1)    return null;
+            KodekParser.FactorContext      fac   = term.factor(0);
+            if (fac.factor() != null)         return null;
+            KodekParser.BaseContext        base  = fac.base();
+            if (base.expression() != null)    return null;
+            KodekParser.AtomContext        atom  = base.atom();
+            return atom.functionCall();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Błąd 18: sprawdza czy wyrażenie indeksu jest ujemnym literałem.
+     * Obsługuje formę "- NUMBER" (unarne minus jako osobny token) oraz ujemny literał.
+     */
+    private void checkNegativeIndex(KodekParser.ExpressionContext indexExpr, Token contextTok) {
+        if (indexExpr == null) return;
+        try {
+            // Sprawdź czy to proste "-NUMBER" (arithmetic z tokenem minus i jednym termem)
+            KodekParser.ArithmeticContext arith =
+                    indexExpr.logicalOr().logicalAnd(0).negation(0).comparison().arithmetic(0);
+            // Forma: term '-' term gdzie pierwszy term to brak, a drugi to liczba → nie, sprawdź inaczej
+            // Wystarczy sprawdzić czy arithmetic ma operator '-' i pierwszy term jest 0-owy literał
+            // lub czy atom jest liczbą ujemną (gramatyka nie ma unary minus, więc sprawdzamy arithmetic)
+            if (arith.term().size() == 1) {
+                // Może być literał – sprawdzamy czy to liczba ujemna przez konwersję tekstu
+                // Gramatyka Kodek nie obsługuje unary minus w literałach, więc ujemny indeks
+                // musiałby pojawić się jako "0 - X". Jeśli jednak parsuje się jako samo NUMBER
+                // z wartością ujemną (np. przez rozszerzenie gramatyki), sprawdzamy to:
+                KodekParser.AtomContext atom =
+                        arith.term(0).factor(0).base().atom();
+                if (atom != null && atom.NUMBER() != null) {
+                    String txt = atom.NUMBER().getText();
+                    try {
+                        double val = Double.parseDouble(txt);
+                        if (val < 0) {
+                            addError(contextTok, "indeks listy nie może być ujemny (podano: " + txt + ")");
+                        }
+                    } catch (NumberFormatException ignored) { }
+                }
+            }
+            // Forma "0 - N" lub podobna: jeśli wynikiem jest ujemna liczba całkowita (znamy oba operandy)
+            if (arith.term().size() >= 2) {
+                String firstOp = arith.getChild(1).getText(); // operator między term(0) a term(1)
+                if ("-".equals(firstOp)) {
+                    // Oba składniki mogą być literałami – sprawdź
+                    Double lhs = tryExtractNumber(arith.term(0));
+                    Double rhs = tryExtractNumber(arith.term(1));
+                    if (lhs != null && rhs != null && (lhs - rhs) < 0) {
+                        addError(contextTok,
+                                "indeks listy nie może być ujemny (wartość: " + ((Double)(lhs - rhs)).intValue() + ")");
+                    }
+                }
+            }
+        } catch (Exception ignored) { }
+    }
+
+    /**
+     * Próbuje wyłuskać wartość liczbową z prostego term (bez operatorów),
+     * zwraca null jeśli niemożliwe.
+     */
+    private Double tryExtractNumber(KodekParser.TermContext term) {
+        try {
+            if (term.factor().size() != 1) return null;
+            KodekParser.AtomContext atom = term.factor(0).base().atom();
+            if (atom == null || atom.NUMBER() == null) return null;
+            return Double.parseDouble(atom.NUMBER().getText());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Błąd 19: sprawdza czy pętla 'dla k od X do Y' ma pusty zakres gdy oba krańce
+     * są literałami całkowitymi i start > koniec.
+     */
+    private void checkEmptyForRange(KodekParser.ExpressionContext fromExpr,
+                                    KodekParser.ExpressionContext toExpr,
+                                    Token varTok) {
+        Double from = tryExtractExprNumber(fromExpr);
+        Double to   = tryExtractExprNumber(toExpr);
+        if (from != null && to != null && from > to) {
+            addError(varTok,
+                    "pętla 'dla...od...do' ma pusty zakres: " + from.intValue()
+                            + " > " + to.intValue() + " – ciało pętli nigdy nie zostanie wykonane");
+        }
+    }
+
+    /**
+     * Próbuje wyłuskać wartość liczbową z prostego wyrażenia (sam literał).
+     */
+    private Double tryExtractExprNumber(KodekParser.ExpressionContext expr) {
+        try {
+            return tryExtractNumber(
+                    expr.logicalOr().logicalAnd(0).negation(0)
+                            .comparison().arithmetic(0).term(0));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Próbuje uzyskać pierwszy token z dowolnego kontekstu parsera
+     * (używane do podawania lokalizacji błędów arytmetycznych).
+     */
+    private Token getFirstToken(ParserRuleContext ctx) {
+        Token t = ctx.getStart();
+        return (t != null) ? t : new CommonToken(0, "?");
     }
 }
