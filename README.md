@@ -90,6 +90,19 @@ Generacja kodu C odbywa się przez klasę `CGenerator extends KodekBaseVisitor<S
 | `tekst` | łańcuch znaków | `char[256]` (lokalnie) / `char*` (parametr) | `zmienna tekst imie = "Ala"` |
 | `logiczny` | wartość logiczna | `int` (0/1) | `zmienna logiczny dorosly = fałsz` |
 | `lista` | dynamiczna lista liczb całkowitych | `KodekLista` (struct) | `zmienna lista oceny = [4, 5, 3]` |
+| `lista <typ>` | dynamiczna lista elementów danego typu | `KodekLista` / `KodekLista_u` / `KodekLista_t` | `zmienna lista tekst imiona = ["Ala", "Ola"]` |
+
+> **Listy typowane.** Po słowie `lista` można podać typ elementu: `lista liczba`, `lista ułamek`,
+> `lista tekst`, `lista logiczny`. Samo `lista` (bez typu) oznacza listę liczb całkowitych
+> (zgodność wsteczna). Typ elementu jest weryfikowany semantycznie – np. dodanie tekstu do
+> `lista liczba` lub przypisanie `lista tekst = [1, 2]` zgłasza błąd.
+>
+> ```
+> zmienna lista liczba   oceny  = [5, 4, 3]
+> zmienna lista ułamek   ceny   = [1.5, 2.25]
+> zmienna lista tekst    imiona = ["Ala", "Ola"]
+> zmienna lista logiczny flagi  = [prawda, fałsz]
+> ```
 
 ### 3. Operatory
 
@@ -207,11 +220,15 @@ loopBlockStmt
     ;
 
 typeName
+    : scalarType
+    | 'lista' scalarType?      // 'lista' = lista liczb; 'lista <typ>' np. 'lista tekst'
+    ;
+
+scalarType
     : 'liczba'
     | 'ułamek'
     | 'tekst'
     | 'logiczny'
-    | 'lista'
     ;
 
 varDecl
@@ -364,7 +381,8 @@ Statement        = VarDecl | Assignment | IfStmt | ForLoop | WhileLoop
                  | FunctionDef | FunctionCall | ReturnStmt
                  | ReadStmt | WriteStmt | FileStmt
 
-Type             = "liczba" | "ułamek" | "tekst" | "logiczny" | "lista"
+Type             = ScalarType | "lista" [ ScalarType ]
+ScalarType       = "liczba" | "ułamek" | "tekst" | "logiczny"
 
 VarDecl          = "zmienna" Type Identifier [ "=" Expression ]
 Assignment       = Identifier "=" Expression
