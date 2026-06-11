@@ -8,7 +8,7 @@
 # To rozwiązuje problem gdzie dodaj() zawsze dodaje na KONIEC,
 # a top po popsie wskazuje na już zużyty slot.
 
-zmienna lista dane = [10, 7, 8, 9, 1, 5, 3, 6]
+zmienna lista liczba dane = [10, 7, 8, 9, 1, 5, 3, 6]
 zmienna liczba n = rozmiar(dane)
 
 pisz("Przed sortowaniem: ")
@@ -18,8 +18,8 @@ dla x w dane {
 }
 piszln("")
 
-zmienna lista stos_lewy
-zmienna lista stos_prawy
+zmienna lista liczba stos_lewy
+zmienna lista liczba stos_prawy
 zmienna liczba top = 0
 
 # Inicjalne pchnięcie całej tablicy

@@ -369,28 +369,6 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
     }
 
     // =========================================================
-    //  WYWOŁANIE FUNKCJI JAKO SAMODZIELNA INSTRUKCJA (simpleStmt)
-    // =========================================================
-
-    @Override
-    public Void visitSimpleStmt(KodekParser.SimpleStmtContext ctx) {
-        // Błąd 21: wywołanie funkcji z typem zwracanym użyte jako instrukcja –
-        //          wynik jest po cichu ignorowany (ostrzeżenie)
-        if (ctx.functionCall() != null) {
-            KodekParser.FunctionCallContext fc = ctx.functionCall();
-            String fname = fc.ID().getText();
-            FunctionInfo info = functions.get(fname);
-            if (info == null) info = BUILTINS.get(fname);
-            if (info != null && !"void".equals(info.returnType)) {
-                addError(fc.ID().getSymbol(),
-                        "wynik funkcji '" + fname + "' (typ: '" + pretty(info.returnType)
-                                + "') jest ignorowany – czy to zamierzone?");
-            }
-        }
-        return visitChildren(ctx);
-    }
-
-    // =========================================================
     //  DEFINICJA FUNKCJI
     // =========================================================
 
@@ -635,14 +613,16 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
     @Override
     public Void visitComparison(KodekParser.ComparisonContext ctx) {
-        // Błąd 20: operator porównania na typie logiczny (np. prawda > fałsz)
-        if (!ctx.compOp().isEmpty()) {
-            for (KodekParser.ArithmeticContext a : ctx.arithmetic()) {
-                String type = inferArithmetic(a);
-                Token  tok  = getFirstToken(a);
-                if ("logiczny".equals(type)) {
-                    addError(tok,
-                            "operator porównania użyty na wartości typu 'logiczny'");
+        // Błąd 20: operator PORZĄDKUJĄCY (<, >, <=, >=) na typie logiczny (np. prawda > fałsz).
+        // Równość (==, !=) na wartościach logicznych jest poprawna i NIE jest zgłaszana.
+        for (int i = 0; i < ctx.compOp().size(); i++) {
+            String op = ctx.compOp(i).getText();
+            if ("==".equals(op) || "!=".equals(op)) continue;   // równość – dozwolona
+            // operandy sąsiadujące z tym operatorem: arithmetic(i) <op> arithmetic(i+1)
+            for (KodekParser.ArithmeticContext a : List.of(ctx.arithmetic(i), ctx.arithmetic(i + 1))) {
+                if ("logiczny".equals(inferArithmetic(a))) {
+                    addError(getFirstToken(a),
+                            "operator porównania '" + op + "' nie ma sensu dla wartości typu 'logiczny'");
                 }
             }
         }

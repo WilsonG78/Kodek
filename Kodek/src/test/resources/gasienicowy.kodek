@@ -2,7 +2,7 @@
 # Szuka ciągłej podtablicy liczb nieujemnych o zadanej sumie
 # Złożoność: O(n)
 
-zmienna lista dane = [1, 4, 2, 6, 3, 8, 2, 5, 1, 3]
+zmienna lista liczba dane = [1, 4, 2, 6, 3, 8, 2, 5, 1, 3]
 zmienna liczba n   = rozmiar(dane)
 zmienna liczba cel = 11
 

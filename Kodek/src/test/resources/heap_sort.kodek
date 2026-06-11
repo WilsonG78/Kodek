@@ -1,7 +1,7 @@
 # Algorytm sortowania przez kopcowanie (Heap Sort)
 # Używa max-kopca; heapify zaimplementowane iteracyjnie
 
-zmienna lista dane = [12, 11, 13, 5, 6, 7, 4, 15]
+zmienna lista liczba dane = [12, 11, 13, 5, 6, 7, 4, 15]
 zmienna liczba n = rozmiar(dane)
 
 pisz("Przed sortowaniem: ")

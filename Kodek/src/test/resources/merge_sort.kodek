@@ -1,7 +1,7 @@
 # Algorytm sortowania przez scalanie (Merge Sort)
 # Wersja iteracyjna bottom-up – sortuje listę w porządku rosnącym
 
-zmienna lista dane = [38, 27, 43, 3, 9, 82, 10, 1]
+zmienna lista liczba dane = [38, 27, 43, 3, 9, 82, 10, 1]
 zmienna liczba n = rozmiar(dane)
 
 pisz("Przed sortowaniem: ")
@@ -29,7 +29,7 @@ dopóki (szerokosc < n) {
 
         # Scal dane[lewy..srodek] z dane[srodek+1..prawy]
         jeśli (srodek < prawy) {
-            zmienna lista bufor
+            zmienna lista liczba bufor
             zmienna liczba i = lewy
             zmienna liczba j = srodek + 1
 

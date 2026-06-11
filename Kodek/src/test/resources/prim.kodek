@@ -12,14 +12,14 @@ zmienna liczba N = 5
 # 2: [ 0,  3,  0,  0,  7 ]
 # 3: [ 6,  8,  0,  0,  9 ]
 # 4: [ 0,  5,  7,  9,  0 ]
-zmienna lista wagi = [0, 2, 0, 6, 0, 2, 0, 3, 8, 5, 0, 3, 0, 0, 7, 6, 8, 0, 0, 9, 0, 5, 7, 9, 0]
+zmienna lista liczba wagi = [0, 2, 0, 6, 0, 2, 0, 3, 8, 5, 0, 3, 0, 0, 7, 6, 8, 0, 0, 9, 0, 5, 7, 9, 0]
 
 # klucz[i]  = najmniejsza waga krawędzi łączącej i z aktualnym MST
 # wMST[i]   = 1 jeśli węzeł i należy już do MST
 # rodzic[i] = poprzednik węzła i w MST
-zmienna lista klucz
-zmienna lista wMST
-zmienna lista rodzic
+zmienna lista liczba klucz
+zmienna lista liczba wMST
+zmienna lista liczba rodzic
 
 zmienna liczba INF = 999999
 dla i od 0 do N - 1 {

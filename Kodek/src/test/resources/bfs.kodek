@@ -12,16 +12,16 @@ zmienna liczba N = 6
 # 3: [  0, 0, 0, 0, 0, 1 ]
 # 4: [  0, 0, 0, 0, 0, 1 ]
 # 5: [  0, 0, 0, 0, 0, 0 ]
-zmienna lista macierz = [0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+zmienna lista liczba macierz = [0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
 
 # Odległości: 999 = nieosiągalny
-zmienna lista odl
+zmienna lista liczba odl
 dla i od 0 do N - 1 {
     dodaj(odl, 999)
 }
 
 # Kolejka BFS (lista + wskaźnik głowy)
-zmienna lista kolejka
+zmienna lista liczba kolejka
 zmienna liczba glowa = 0
 zmienna liczba start = 0
 

@@ -17,16 +17,16 @@ zmienna liczba N = 6
 # 3: [  0, 1, 0, 0, 0, 1 ]
 # 4: [  0, 1, 1, 0, 0, 1 ]
 # 5: [  0, 0, 0, 1, 1, 0 ]
-zmienna lista macierz = [0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0]
+zmienna lista liczba macierz = [0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0]
 
 # Tablica odwiedzonych węzłów
-zmienna lista odwiedzone
+zmienna lista liczba odwiedzone
 dla i od 0 do N - 1 {
     dodaj(odwiedzone, 0)
 }
 
 # Stos DFS (lista + wskaźnik top)
-zmienna lista stos
+zmienna lista liczba stos
 zmienna liczba top = 0
 dodaj(stos, 0)   # startujemy od węzła 0
 
