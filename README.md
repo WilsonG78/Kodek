@@ -636,7 +636,7 @@ for (int k = 1; k <= 10; k++) {
 ### 7. Funkcje z typami
 
 ```
-funkcja dodaj(liczba a, liczba b) zwraca liczba {
+funkcja suma(liczba a, liczba b) zwraca liczba {
     zwróć a + b
 }
 
@@ -644,13 +644,13 @@ funkcja przywitaj(tekst imie) {
     piszln(imie)
 }
 
-zmienna liczba wynik = dodaj(3, 7)
+zmienna liczba wynik = suma(3, 7)
 przywitaj("Ala")
 ```
 
 Kompiluje się do C:
 ```c
-int dodaj(int a, int b) {
+int suma(int a, int b) {
     return a + b;
 }
 
@@ -659,7 +659,7 @@ void przywitaj(char* imie) {
 }
 
 int main() {
-    int wynik = dodaj(3, 7);
+    int wynik = suma(3, 7);
     przywitaj("Ala");
     return 0;
 }
@@ -691,6 +691,9 @@ gcc -lm                      ← uruchamiany jako podproces
 | `Kodek/src/main/java/AGH/parser/Main.java` | Punkt wejścia CLI |
 | `Kodek/src/main/java/AGH/parser/WebServer.java` | Serwer HTTP — playground w przeglądarce (`POST /run` → JSON) |
 | `Kodek/src/test/java/AGH/parser/CGeneratorTest.java` | Testy jednostkowe — asercje na fragmentach kodu C |
+| `Kodek/src/test/java/AGH/parser/SemanticAnalyzerTest.java` | Testy analizy semantycznej (`KodekErrorHandler`) |
+| `Kodek/src/test/java/AGH/parser/KodekE2ETest.java` | Testy E2E — kompilacja i uruchomienie plików `.kodek` przez gcc |
+| `Kodek/src/test/java/AGH/parser/KodekTestSupport.java` | Wspólny pipeline testowy (parse → semantyka → generacja) |
 | `Kodek/src/test/resources/*.kodek` | Przykładowe programy w języku Kodek |
 
 Pliki generowane przez ANTLR4 (`KodekLexer`, `KodekParser`, Visitor, Listener) trafiają do `target/generated-sources/antlr4/` i **nie są** commitowane.
@@ -699,8 +702,8 @@ Pliki generowane przez ANTLR4 (`KodekLexer`, `KodekParser`, Visitor, Listener) t
 
 - **Generacja trójfazowa:** faza 0 skanuje typy zwracane funkcji; faza 1 emituje definicje funkcji przed `main()`; faza 2 emituje instrukcje najwyższego poziomu wewnątrz `main()`.
 - **Stos zakresów** (`Deque<Map<String,String>>`): mapuje nazwy zmiennych → typy Kodek. Używany do inferencji typów w specyfikatorach formatu `printf`/`scanf`.
-- **Śledzenie parametrów `lista`:** lokalne zmienne `lista` mają typ `"lista"` (C: `KodekLista`), a parametry funkcji typu `lista` — typ `"lista_ptr"` (C: `KodekLista*`). Helper `listRef(name)` zwraca `"&name"` dla lokalnych i `"name"` dla wskaźnikowych.
-- **Środowisko uruchomieniowe `KodekLista`:** struct (`int* data; int len; int cap`) ze strategią podwajania pojemności, wstawiany do każdego wygenerowanego pliku C.
+- **Śledzenie parametrów `lista`:** lokalne zmienne mają typ `"lista:<element>"` (C: `KodekLista` / `KodekLista_u` / `KodekLista_t`), a parametry funkcji — `"lista_ptr:<element>"` (wskaźnik). Helper `listRef(name)` zwraca `"&name"` dla lokalnych i `"name"` dla wskaźnikowych.
+- **Środowisko uruchomieniowe list:** trzy warianty structów (`KodekLista` dla `liczba`/`logiczny`, `KodekLista_u` dla `ułamek`, `KodekLista_t` dla `tekst`) ze strategią podwajania pojemności, wstawiane do każdego wygenerowanego pliku C.
 
 ### Ograniczenia języka
 
@@ -708,6 +711,6 @@ Pliki generowane przez ANTLR4 (`KodekLexer`, `KodekParser`, Visitor, Listener) t
 |-------------|----------|
 | Brak ujemnych literałów (gramatyka: `NUMBER = DIGIT+`) | Pisz `0 - 1` zamiast `-1` |
 | Słowa kluczowe nie mogą być nazwami zmiennych | Zob. tabela słów kluczowych |
-| `lista` przechowuje tylko wartości `int` | — |
+| Listy są statycznie typowane (`lista liczba`, `lista tekst` itd.) | Użyj właściwego typu elementu; mieszanie typów w jednej liście zgłasza błąd semantyczny |
 | Pętla `dla…od…do` tylko inkrementuje | Użyj `dopóki` z własnym licznikiem |
 | Funkcje nie mogą być zagnieżdżone (ograniczenie C) | Definiuj wszystkie funkcje na poziomie globalnym |

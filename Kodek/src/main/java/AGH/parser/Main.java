@@ -115,6 +115,11 @@ public class Main {
             System.exit(1);
         }
 
+        if (errorHandler.hasWarnings()) {
+            printBanner("Ostrzeżenia semantyczne");
+            errorHandler.printWarnings(System.err);
+        }
+
         // =================================================================
         // Faza 3: Generowanie kodu C
         // =================================================================

@@ -1,5 +1,5 @@
 # Test funkcji - sprawdza że definicja jest przed main()
-funkcja dodaj(liczba a, liczba b) zwraca liczba {
+funkcja suma(liczba a, liczba b) zwraca liczba {
     zwróć a + b
 }
 
@@ -8,6 +8,6 @@ funkcja przywitaj(tekst imie) {
     piszln(imie)
 }
 
-zmienna liczba wynik = dodaj(3, 7)
+zmienna liczba wynik = suma(3, 7)
 piszln(wynik)
 przywitaj("Ala")

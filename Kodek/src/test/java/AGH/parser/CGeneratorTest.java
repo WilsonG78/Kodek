@@ -1,12 +1,6 @@
 package AGH.parser;
 
-import org.antlr.v4.runtime.*;
-import org.antlr.v4.runtime.tree.*;
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.*;
-
-import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -22,18 +16,9 @@ class CGeneratorTest {
     //  POMOCNICZE
     // =========================================================
 
-    /** Parsuje kod Kodek i zwraca wygenerowany kod C. */
+    /** Parsuje, sprawdza semantykę i zwraca wygenerowany kod C (jak w Main). */
     private String generate(String kodekCode) {
-        CharStream input = CharStreams.fromString(kodekCode);
-        KodekLexer lexer = new KodekLexer(input);
-        lexer.removeErrorListeners();
-        CommonTokenStream tokens = new CommonTokenStream(lexer);
-        KodekParser parser = new KodekParser(tokens);
-        parser.removeErrorListeners();
-        ParseTree tree = parser.program();
-
-        CGenerator gen = new CGenerator();
-        return gen.generate(tree);
+        return KodekTestSupport.generate(kodekCode);
     }
 
     /** Sprawdza, że kod C zawiera fragment (ignorując białe znaki na początku/końcu linii). */
@@ -364,15 +349,15 @@ class CGeneratorTest {
     @DisplayName("definicja funkcji jest PRZED main() [kluczowa naprawa]")
     void testFunctionBeforeMain() {
         String code = generate("""
-                funkcja dodaj(liczba a, liczba b) zwraca liczba {
+                funkcja suma(liczba a, liczba b) zwraca liczba {
                     zwróć a + b
                 }
-                piszln(dodaj(3, 7))
+                piszln(suma(3, 7))
                 """);
 
-        int funcIdx = code.indexOf("int dodaj(");
+        int funcIdx = code.indexOf("int suma(");
         int mainIdx = code.indexOf("int main()");
-        assertTrue(funcIdx >= 0, "Definicja funkcji dodaj nie znaleziona w kodzie C");
+        assertTrue(funcIdx >= 0, "Definicja funkcji suma nie znaleziona w kodzie C");
         assertTrue(mainIdx >= 0, "int main() nie znaleziony");
         assertTrue(funcIdx < mainIdx,
             "Funkcja powinna być PRZED main()!\nFunkcja na pozycji: " + funcIdx

@@ -88,6 +88,7 @@ public class WebServer {
 
         String output = "";
         String cCode  = "";
+        StringBuilder semWarnings = new StringBuilder();
         boolean timedOut = false;
 
         try {
@@ -132,6 +133,14 @@ public class WebServer {
                 sendJson(ex, 200, buildResultJson(semErrors.toString(), ""));
                 return;
             }
+
+            StringBuilder semWarningsLocal = new StringBuilder();
+            if (errorHandler.hasWarnings()) {
+                for (KodekErrorHandler.SemanticWarning w : errorHandler.getWarnings()) {
+                    semWarningsLocal.append(w.toString()).append("\n");
+                }
+            }
+            semWarnings.append(semWarningsLocal);
 
             // ── Generowanie C ────────────────────────────────────────
             CGenerator gen = new CGenerator();
@@ -184,6 +193,10 @@ public class WebServer {
             // Zawsze czyść pliki tymczasowe
             silentDelete(cFile);
             silentDelete(binary);
+        }
+
+        if (semWarnings.length() > 0) {
+            output = semWarnings + "---\n" + output;
         }
 
         sendJson(ex, 200, buildResultJson(output, cCode));
@@ -355,10 +368,10 @@ public class WebServer {
 piszln("")</pre>
 
     <div class="label">Funkcja:</div>
-    <pre onclick="load(this)">funkcja dodaj(liczba a, liczba b) zwraca liczba {
+    <pre onclick="load(this)">funkcja suma(liczba a, liczba b) zwraca liczba {
     zwróć a + b
 }
-zmienna liczba wynik = dodaj(3, 7)
+zmienna liczba wynik = suma(3, 7)
 piszln(wynik)</pre>
 
     <div class="label">Lista:</div>

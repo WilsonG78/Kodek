@@ -52,7 +52,25 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
         @Override
         public String toString() {
-            return String.format("  [błąd semantyczny] %d:%d — %s", line, column, message);
+            return String.format("  [błąd semantyczny] %d:%d — %s", line, column + 1, message);
+        }
+    }
+
+    /** Ostrzeżenie semantyczne – nie blokuje kompilacji. */
+    public static class SemanticWarning {
+        public final int    line;
+        public final int    column;
+        public final String message;
+
+        SemanticWarning(int line, int column, String message) {
+            this.line    = line;
+            this.column  = column;
+            this.message = message;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("  [ostrzeżenie] %d:%d — %s", line, column + 1, message);
         }
     }
 
@@ -72,7 +90,10 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
     // =========================================================
 
     private final List<SemanticError>         errors          = new ArrayList<>();
+    private final List<SemanticWarning>       warnings        = new ArrayList<>();
     private final Deque<Map<String, String>>  scopeStack      = new ArrayDeque<>();
+    /** Znany rozmiar listy z inicjalizatora literału (np. [1,2,3] → 3). */
+    private final Map<String, Integer>        listSizes       = new HashMap<>();
     private final Map<String, FunctionInfo>   functions       = new HashMap<>();
     private       int                         loopDepth       = 0;   // zagłębienie pętli
     private       String                      currentFuncName = null; // aktualnie odwiedzana funkcja
@@ -119,11 +140,20 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
     public boolean hasErrors() { return !errors.isEmpty(); }
 
+    public boolean hasWarnings() { return !warnings.isEmpty(); }
+
     public List<SemanticError> getErrors() { return Collections.unmodifiableList(errors); }
+
+    public List<SemanticWarning> getWarnings() { return Collections.unmodifiableList(warnings); }
 
     public void printErrors(java.io.PrintStream out) {
         for (SemanticError e : errors) out.println(e);
         out.printf("  → Łącznie błędów semantycznych: %d%n", errors.size());
+    }
+
+    public void printWarnings(java.io.PrintStream out) {
+        for (SemanticWarning w : warnings) out.println(w);
+        out.printf("  → Łącznie ostrzeżeń: %d%n", warnings.size());
     }
 
     // =========================================================
@@ -154,6 +184,14 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         if (BUILTINS.containsKey(name)) {
             addError(ctx.ID().getSymbol(),
                     "redeklaracja wbudowanej funkcji '" + name + "' jest niedozwolona");
+            return;
+        }
+
+        // Redeklaracja funkcji użytkownika
+        if (functions.containsKey(name)) {
+            addError(ctx.ID().getSymbol(),
+                    "funkcja '" + name + "' jest już zdefiniowana");
+            return;
         }
 
         functions.put(name, new FunctionInfo(returnType, paramTypes));
@@ -183,6 +221,14 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
     private void addError(Token token, String msg) {
         addError(token.getLine(), token.getCharPositionInLine(), msg);
+    }
+
+    private void addWarning(int line, int col, String msg) {
+        warnings.add(new SemanticWarning(line, col, msg));
+    }
+
+    private void addWarning(Token token, String msg) {
+        addWarning(token.getLine(), token.getCharPositionInLine(), msg);
     }
 
     // =========================================================
@@ -237,9 +283,27 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
                         "niezgodność typów: zmienna '" + name + "' jest typu '" + pretty(type)
                                 + "', ale wyrażenie ma typ '" + pretty(exprType) + "'");
             }
+            if (isList(type)) {
+                int literalSize = extractListLiteralSize(ctx.expression());
+                if (literalSize >= 0) {
+                    listSizes.put(name, literalSize);
+                }
+            }
             visit(ctx.expression());
         }
         return null;
+    }
+
+    // =========================================================
+    //  INSTRUKCJA PROSTA (wywołanie funkcji jako statement)
+    // =========================================================
+
+    @Override
+    public Void visitSimpleStmt(KodekParser.SimpleStmtContext ctx) {
+        if (ctx.functionCall() != null) {
+            checkIgnoredReturnValue(ctx.functionCall());
+        }
+        return visitChildren(ctx);
     }
 
     // =========================================================
@@ -259,6 +323,7 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
             // Błąd 18: ujemny literał jako indeks
             checkNegativeIndex(ctx.expression(0), tok);
+            checkIndexOutOfBounds(name, varType, ctx.expression(0), tok);
 
             if (!isList(varType)) {
                 addError(tok,
@@ -310,6 +375,7 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
         // Błąd 18: ujemny literał jako indeks
         checkNegativeIndex(ctx.expression(), tok);
+        checkIndexOutOfBounds(name, varType, ctx.expression(), tok);
 
         visit(ctx.expression());
         return null;
@@ -359,6 +425,7 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
                                         + "', podano '" + pretty(actualType) + "'");
                     }
                 }
+                checkBuiltinCall(name, tok, args);
             }
         }
 
@@ -464,6 +531,7 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
             // dla k od X do Y
             visit(ctx.expression(0));
             visit(ctx.expression(1));
+            checkEmptyForRange(ctx.expression(0), ctx.expression(1), ctx.ID().getSymbol());
         } else {
             // dla elem w lista
             String listExprType = inferType(ctx.expression(0));
@@ -613,20 +681,83 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
 
     @Override
     public Void visitComparison(KodekParser.ComparisonContext ctx) {
-        // Błąd 20: operator PORZĄDKUJĄCY (<, >, <=, >=) na typie logiczny (np. prawda > fałsz).
-        // Równość (==, !=) na wartościach logicznych jest poprawna i NIE jest zgłaszana.
         for (int i = 0; i < ctx.compOp().size(); i++) {
             String op = ctx.compOp(i).getText();
-            if ("==".equals(op) || "!=".equals(op)) continue;   // równość – dozwolona
-            // operandy sąsiadujące z tym operatorem: arithmetic(i) <op> arithmetic(i+1)
-            for (KodekParser.ArithmeticContext a : List.of(ctx.arithmetic(i), ctx.arithmetic(i + 1))) {
-                if ("logiczny".equals(inferArithmetic(a))) {
-                    addError(getFirstToken(a),
-                            "operator porównania '" + op + "' nie ma sensu dla wartości typu 'logiczny'");
+            String left  = inferArithmetic(ctx.arithmetic(i));
+            String right = inferArithmetic(ctx.arithmetic(i + 1));
+
+            if ("==".equals(op) || "!=".equals(op)) {
+                if (!UNKNOWN.equals(left) && !UNKNOWN.equals(right)
+                        && !equalityCompatible(left, right)) {
+                    addError(getFirstToken(ctx.arithmetic(i)),
+                            "porównanie '" + op + "' między typami '" + pretty(left)
+                                    + "' i '" + pretty(right) + "' nie ma sensu");
+                }
+            } else {
+                for (KodekParser.ArithmeticContext a : List.of(ctx.arithmetic(i), ctx.arithmetic(i + 1))) {
+                    if ("logiczny".equals(inferArithmetic(a))) {
+                        addError(getFirstToken(a),
+                                "operator porównania '" + op + "' nie ma sensu dla wartości typu 'logiczny'");
+                    }
                 }
             }
         }
         return visitChildren(ctx);
+    }
+
+    @Override
+    public Void visitStrictComparison(KodekParser.StrictComparisonContext ctx) {
+        String op    = ctx.compOp().getText();
+        String left  = inferArithmetic(ctx.arithmetic(0));
+        String right = inferArithmetic(ctx.arithmetic(1));
+        if (("==".equals(op) || "!=".equals(op))
+                && !UNKNOWN.equals(left) && !UNKNOWN.equals(right)
+                && !equalityCompatible(left, right)) {
+            addError(getFirstToken(ctx.arithmetic(0)),
+                    "porównanie '" + op + "' między typami '" + pretty(left)
+                            + "' i '" + pretty(right) + "' nie ma sensu");
+        }
+        return visitChildren(ctx);
+    }
+
+    // =========================================================
+    //  PLIKI
+    // =========================================================
+
+    @Override
+    public Void visitFileStmt(KodekParser.FileStmtContext ctx) {
+        if (ctx.getChild(0).getText().equals("otwórz")) {
+            Token handleTok = ctx.ID().getSymbol();
+            String handle   = ctx.ID().getText();
+
+            String pathType = inferType(ctx.expression());
+            if (!UNKNOWN.equals(pathType) && !typesCompatible("tekst", pathType)) {
+                addError(handleTok,
+                        "otwórz(): ścieżka pliku musi być typu 'tekst', podano '" + pretty(pathType) + "'");
+            }
+            if (functions.containsKey(handle)) {
+                addError(handleTok,
+                        "nazwa uchwytu '" + handle + "' koliduje z zdefiniowaną funkcją");
+            }
+            if (!scopeStack.isEmpty() && scopeStack.peek().containsKey(handle)) {
+                addError(handleTok,
+                        "uchwyt pliku '" + handle + "' jest już zadeklarowany w tym zakresie");
+            } else if (!scopeStack.isEmpty()) {
+                scopeStack.peek().put(handle, "plik");
+            }
+            visit(ctx.expression());
+        } else {
+            String handle  = ctx.ID().getText();
+            Token  tok     = ctx.ID().getSymbol();
+            String varType = lookupVar(handle);
+            if (varType == null) {
+                addError(tok, "zamknij(): niezadeklarowany uchwyt pliku '" + handle + "'");
+            } else if (!"plik".equals(varType)) {
+                addError(tok,
+                        "zamknij(): '" + handle + "' nie jest uchwytem pliku (typ: '" + pretty(varType) + "')");
+            }
+        }
+        return null;
     }
 
     // =========================================================
@@ -637,8 +768,13 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
     public Void visitReadStmt(KodekParser.ReadStmtContext ctx) {
         String name = ctx.ID().getText();
         Token  tok  = ctx.ID().getSymbol();
-        if (lookupVar(name) == null) {
+        String varType = lookupVar(name);
+        if (varType == null) {
             addError(tok, "czytaj(): niezadeklarowana zmienna '" + name + "'");
+        } else if (isList(varType) || "logiczny".equals(varType) || "plik".equals(varType)) {
+            addError(tok,
+                    "czytaj(): zmienna '" + name + "' ma typ '" + pretty(varType)
+                            + "' – dozwolone są tylko: liczba, ułamek, tekst");
         }
         return null;
     }
@@ -795,6 +931,20 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         if (isList(expected) || isList(actual))         return false;
         if ("liczba".equals(actual) && "ułamek".equals(expected)) return true;
         if ("ułamek".equals(actual) && "liczba".equals(expected)) return true;
+        return false;
+    }
+
+    /** Czy typy mogą być porównywane przez == lub !=. */
+    private boolean equalityCompatible(String left, String right) {
+        if (left.equals(right)) return true;
+        if (isList(left) && isList(right)) {
+            return typesCompatible(listElem(left), listElem(right));
+        }
+        if (isList(left) || isList(right)) return false;
+        if (("liczba".equals(left) && "ułamek".equals(right))
+                || ("ułamek".equals(left) && "liczba".equals(right))) {
+            return true;
+        }
         return false;
     }
 
@@ -985,7 +1135,7 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
         Double from = tryExtractExprNumber(fromExpr);
         Double to   = tryExtractExprNumber(toExpr);
         if (from != null && to != null && from > to) {
-            addError(varTok,
+            addWarning(varTok,
                     "pętla 'dla...od...do' ma pusty zakres: " + from.intValue()
                             + " > " + to.intValue() + " – ciało pętli nigdy nie zostanie wykonane");
         }
@@ -1011,5 +1161,105 @@ public class KodekErrorHandler extends KodekBaseVisitor<Void> {
     private Token getFirstToken(ParserRuleContext ctx) {
         Token t = ctx.getStart();
         return (t != null) ? t : new CommonToken(0, "?");
+    }
+
+    /**
+     * Błąd 19: wynik funkcji nie-void użyty jako samodzielna instrukcja.
+     */
+    private void checkIgnoredReturnValue(KodekParser.FunctionCallContext ctx) {
+        String name = ctx.ID().getText();
+        FunctionInfo info = functions.get(name);
+        if (info == null) info = BUILTINS.get(name);
+        if (info != null && !"void".equals(info.returnType) && !UNKNOWN.equals(info.returnType)) {
+            addWarning(ctx.ID().getSymbol(),
+                    "wynik funkcji '" + name + "' (typ '" + pretty(info.returnType)
+                            + "') jest ignorowany");
+        }
+    }
+
+    /** Walidacja wbudowanych funkcji wymagających specjalnej logiki typów. */
+    private void checkBuiltinCall(String name, Token tok,
+                                  List<KodekParser.ExpressionContext> args) {
+        if ("rozmiar".equals(name) && args.size() == 1) {
+            String argType = inferListArgType(args.get(0));
+            if (!isList(argType) && !UNKNOWN.equals(argType)) {
+                addError(tok,
+                        "rozmiar() oczekuje listy, podano '" + pretty(argType) + "'");
+            }
+        } else if ("dodaj".equals(name) && args.size() >= 2) {
+            String listType = inferListArgType(args.get(0));
+            String elemType = inferType(args.get(1));
+            if (!isList(listType) && !UNKNOWN.equals(listType)) {
+                addError(tok,
+                        "dodaj() oczekuje listy jako pierwszego argumentu, podano '" + pretty(listType) + "'");
+            } else if (isList(listType)) {
+                String expectedElem = listElem(listType);
+                if (!UNKNOWN.equals(expectedElem) && !UNKNOWN.equals(elemType)
+                        && !typesCompatible(expectedElem, elemType)) {
+                    addError(tok,
+                            "dodaj(): lista przechowuje '" + pretty(expectedElem)
+                                    + "', a dodawany element ma typ '" + pretty(elemType) + "'");
+                }
+            }
+        } else if ("losowa_liczba".equals(name) && args.size() == 2) {
+            Double min = tryExtractExprNumber(args.get(0));
+            Double max = tryExtractExprNumber(args.get(1));
+            if (min != null && max != null && min > max) {
+                addError(tok,
+                        "losowa_liczba(): minimum (" + min.intValue()
+                                + ") jest większe niż maksimum (" + max.intValue() + ")");
+            }
+        }
+    }
+
+    private String inferListArgType(KodekParser.ExpressionContext expr) {
+        String id = extractSimpleId(expr);
+        if (id != null) {
+            String t = lookupVar(id);
+            if (t != null) return t;
+        }
+        return inferType(expr);
+    }
+
+    private String extractSimpleId(KodekParser.ExpressionContext expr) {
+        try {
+            KodekParser.AtomContext atom = expr.logicalOr().logicalAnd(0).negation(0)
+                    .comparison().arithmetic(0).term(0).factor(0).base().atom();
+            if (atom != null && atom.ID() != null
+                    && atom.functionCall() == null && atom.listAccess() == null) {
+                return atom.ID().getText();
+            }
+        } catch (Exception ignored) { }
+        return null;
+    }
+
+    private int extractListLiteralSize(KodekParser.ExpressionContext expr) {
+        try {
+            KodekParser.AtomContext atom = expr.logicalOr().logicalAnd(0).negation(0)
+                    .comparison().arithmetic(0).term(0).factor(0).base().atom();
+            if (atom != null && atom.listLiteral() != null) {
+                return atom.listLiteral().expression().size();
+            }
+        } catch (Exception ignored) { }
+        return -1;
+    }
+
+    /**
+     * Ostrzeżenie gdy indeks literałowy wykracza poza znany rozmiar listy z inicjalizatora.
+     */
+    private void checkIndexOutOfBounds(String listName, String varType,
+                                       KodekParser.ExpressionContext indexExpr,
+                                       Token contextTok) {
+        if (!isList(varType)) return;
+        Integer knownSize = listSizes.get(listName);
+        if (knownSize == null) return;
+        Double indexVal = tryExtractExprNumber(indexExpr);
+        if (indexVal == null) return;
+        int idx = indexVal.intValue();
+        if (idx < 0 || idx >= knownSize) {
+            addWarning(contextTok,
+                    "indeks " + idx + " może być poza zakresem listy '" + listName
+                            + "' (znany rozmiar: " + knownSize + " elementów)");
+        }
     }
 }
